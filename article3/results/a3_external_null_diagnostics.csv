@@ -1,0 +1,15 @@
+Cohort,Diag,Metric,Value,Interpretation
+GSE77530_MDAnderson,D1_detection,ZP3,"n=32,zero=0(0.00),med=3.259,IQR=3.531,min=0.952,max=10.704,tied=0(0.00)",低零值+合理IQR → 测量可用
+GSE77530_MDAnderson,D2_power,n=32,"alpha=0.05,two-sided,min_detectable_|rho|=0.349",该样本量最多检出 |rho|≥0.35；真实效应 0.2–0.3 大概率落入 null 区间
+GSE77530_MDAnderson,D3_scale_M2,raw,rho=-0.053,原始表达
+GSE77530_MDAnderson,D3_scale_M2,log1p,rho=-0.053,log1p 变换
+GSE77530_MDAnderson,D3_scale_M2,detect_binary,rho=+0.000,检测/未检测二值
+GSE77530_MDAnderson,D3_scale_M2,high_vs_low,rho=-0.117,高表达(≥Q3) vs 低表达
+GSE77530_MDAnderson,D4_jackknife_M2,n=32,"full_rho=-0.053,leave1out_range=[-0.124,+0.042],spread=0.166,mean=-0.053",范围宽 → 结果对个别样本敏感
+GSE113474_NYU,D1_detection,ZP3,"n=24,zero=0(0.00),med=61.525,IQR=65.715,min=5.989,max=300.947,tied=0(0.00)",低零值+合理IQR → 测量可用
+GSE113474_NYU,D2_power,n=24,"alpha=0.05,two-sided,min_detectable_|rho|=0.404",该样本量最多检出 |rho|≥0.40；真实效应 0.2–0.3 大概率落入 null 区间
+GSE113474_NYU,D3_scale_M2,raw,rho=-0.063,原始表达
+GSE113474_NYU,D3_scale_M2,log1p,rho=-0.063,log1p 变换
+GSE113474_NYU,D3_scale_M2,detect_binary,rho=+0.000,检测/未检测二值
+GSE113474_NYU,D3_scale_M2,high_vs_low,rho=-0.236,高表达(≥Q3) vs 低表达
+GSE113474_NYU,D4_jackknife_M2,n=24,"full_rho=-0.063,leave1out_range=[-0.164,+0.064],spread=0.228,mean=-0.064",范围宽 → 结果对个别样本敏感

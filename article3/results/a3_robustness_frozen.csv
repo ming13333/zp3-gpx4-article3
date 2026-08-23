@@ -1,0 +1,23 @@
+Analysis,Metric,Immune_score,N,Spearman_rho,Spearman_p,Pearson_r,Pearson_p,Note
+FL_proportion_baseline,proportion,M2_Macrophage,9186,0.0731,2.379e-12,0.0685,4.942e-11,vs FL canonical proportion
+FL_proportion_baseline,proportion,T_cell_exhaustion,9186,0.0722,4.199e-12,0.0625,2.065e-09,vs FL canonical proportion
+FL_proportion_baseline,proportion,Cytolytic_activity,9186,0.0571,4.322e-08,0.0577,3.143e-08,vs FL canonical proportion
+FL_proportion_baseline,proportion,Treg,9186,0.1367,1.452e-39,0.1456,1.060e-44,vs FL canonical proportion
+FL_proportion_baseline,proportion,IFN_gamma,9186,0.1778,4.073e-66,0.1735,5.654e-63,vs FL canonical proportion
+FL_proportion_baseline,proportion,Checkpoint,9186,0.0634,1.173e-09,0.0538,2.503e-07,vs FL canonical proportion
+FL_proportion_baseline,proportion,Myeloid,9186,0.0681,6.425e-11,0.0575,3.529e-08,vs FL canonical proportion
+log_FL_RI_ratio,compositional_contrast,M2_Macrophage,9186,0.0963,2.255e-20,0.1089,1.247e-25,pairwise log-ratio FL/RI
+log_FL_RI_ratio,compositional_contrast,T_cell_exhaustion,9186,0.1232,2.131e-32,0.1208,3.335e-31,pairwise log-ratio FL/RI
+log_FL_RI_ratio,compositional_contrast,Cytolytic_activity,9186,0.1022,8.840e-23,0.0999,8.062e-22,pairwise log-ratio FL/RI
+log_FL_RI_ratio,compositional_contrast,Treg,9186,0.1933,4.651e-78,0.1901,1.824e-75,pairwise log-ratio FL/RI
+log_FL_RI_ratio,compositional_contrast,IFN_gamma,9186,0.2282,8.182e-109,0.2195,1.310e-100,pairwise log-ratio FL/RI
+log_FL_RI_ratio,compositional_contrast,Checkpoint,9186,0.113,1.650e-27,0.1117,6.894e-27,pairwise log-ratio FL/RI
+log_FL_RI_ratio,compositional_contrast,Myeloid,9186,0.1185,4.554e-30,0.1128,2.156e-27,pairwise log-ratio FL/RI
+FL_RI_coupling,compositional,FL_vs_RI,9186,-0.8215,0.000e+00,,,component coupling within compositional sum
+LowSignal_filter_maxIso_ge_0.5,proportion_filtered,M2_Macrophage,7577,0.0777,1.282e-11,0.071,6.223e-10,filtered from 9186 to 7577
+LowSignal_filter_maxIso_ge_0.5,proportion_filtered,T_cell_exhaustion,7577,0.0881,1.556e-14,0.0786,7.151e-12,filtered from 9186 to 7577
+LowSignal_filter_maxIso_ge_0.5,proportion_filtered,Cytolytic_activity,7577,0.076,3.601e-11,0.0787,6.682e-12,filtered from 9186 to 7577
+LowSignal_filter_maxIso_ge_0.5,proportion_filtered,Treg,7577,0.1611,3.116e-45,0.1742,1.096e-52,filtered from 9186 to 7577
+LowSignal_filter_maxIso_ge_0.5,proportion_filtered,IFN_gamma,7577,0.2036,1.086e-71,0.2018,1.734e-70,filtered from 9186 to 7577
+LowSignal_filter_maxIso_ge_0.5,proportion_filtered,Checkpoint,7577,0.0777,1.261e-11,0.0679,3.262e-09,filtered from 9186 to 7577
+LowSignal_filter_maxIso_ge_0.5,proportion_filtered,Myeloid,7577,0.0809,1.775e-12,0.0721,3.383e-10,filtered from 9186 to 7577

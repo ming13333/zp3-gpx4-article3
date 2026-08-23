@@ -1,0 +1,2 @@
+N_cancers,Spearman_rho,Spearman_p,Pearson_r,Pearson_p,LOO_rho_min,LOO_rho_max,Bootstrap_n,Bootstrap_CI_low,Bootstrap_CI_high
+8,0.9524,0.00026040002438725105,0.8796,0.003983620138451191,0.9286,0.9643,10000,0.6203,1.0
