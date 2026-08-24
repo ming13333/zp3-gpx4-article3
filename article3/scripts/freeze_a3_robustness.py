@@ -1,35 +1,35 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结⑤ — 组成数据与稳健性分析（freeze_a3_robustness）
+A3 Freeze ⑤ — Compositional Data and Robustness Analysis (freeze_a3_robustness)
 ================================================================
-目的：正面回应审稿人对「组成数据 / compositional data」与「样本级验证薄弱」
-两项核心质疑，从已冻结的输入独立复算，产出两张冻结表：
-        - a3_robustness_frozen.csv  （比例 metric 敏感性 + 组成耦合）
-        - a3_robustness_meta.csv     （癌种分层 Fisher-z 荟萃 + 异质性）
+Purpose: Directly respond to the reviewers' two core criticisms regarding "compositional data" and "weak sample-level validation"
+These two core criticisms are independently recomputed from frozen inputs to produce two frozen tables:
+        - a3_robustness_frozen.csv  (proportion metric sensitivity + compositional coupling)
+        - a3_robustness_meta.csv     (cancer-type stratified Fisher-z meta-analysis + heterogeneity)
 
-四大分析：
-  1) Baseline：FL 比例 vs 7 个免疫评分（Spearman/Pearson）—— 与 mixed-model 方向对照
-  2) Compositional contrast：log(FL/RI) 配对 log-ratio 替代比例，验证方向稳健性
-     （log-ratio 是组成数据最轻量的 ILR 控制，规避单纯比例的组成约束误导）
-  3) FL–RI coupling：Spearman(FL, RI) 量化两主导 isoform 比例的负相关耦合
-     （说明比例是组成约束下的相对量，不能直接解读为「独立丰度」）
-  4) Low-signal filter：仅保留主导 isoform 比例 ≥ 0.5 的样本（可信定量代理），
-     复算 FL 比例关联，检验低信号样本是否驱动结论
+Four major analyses:
+  1) Baseline: FL proportion vs 7 immune scores (Spearman/Pearson) — comparison with mixed-model direction
+  2) Compositional contrast: log(FL/RI) paired log-ratio replaces proportion to verify direction robustness
+     (log-ratio is the lightest ILR control for compositional data, avoiding the misleading compositional constraints of simple proportions)
+  3) FL–RI coupling: Spearman(FL, RI) quantifies the negative-correlation coupling of the two dominant isoform proportions
+     (indicating that proportion is a relative quantity under compositional constraints and cannot be directly interpreted as "independent abundance")
+  4) Low-signal filter: retain only samples with dominant isoform proportion ≥ 0.5 (trusted quantitative proxy),
+     recompute FL proportion associations to test whether low-signal samples drive the conclusion
 
-荟萃（meta）：
-  对 headline 免疫评分（M2_Macrophage、Myeloid），按癌种分层计算 Spearman(FL, score)
-  （每癌种 N≥30），固定效应 Fisher-z 合并：Z=Σw_i z_i / Σw_i，w_i=N_i−3；
-  报告合并 ρ、95% CI、Cochran Q、I²。
+Meta-analysis (meta):
+  For headline immune scores (M2_Macrophage, Myeloid), compute Spearman(FL, score) stratified by cancer type
+  (N≥30 per cancer type), fixed-effect Fisher-z pooling: Z=Σw_i z_i / Σw_i, w_i=N_i−3;
+  Report pooled ρ, 95% CI, Cochran Q, I².
 
-实现要点（纯标准库，无第三方依赖，最大化可复现性）：
-  - Spearman = 对平均秩（处理并列）做 Pearson
-  - 相关 p 值：大样本 t 近似经正则不完全 Beta（betai）精确校正
-  - 比例极小值加 eps 防 log 下溢
+Implementation notes (pure standard library, no third-party dependencies, maximum reproducibility):
+  - Spearman = Pearson on mean ranks (handling ties)
+  - Correlation p-value: large-sample t approximation exactly corrected via regularized incomplete Beta (betai)
+  - Add eps to extremely small proportions to prevent log underflow
 
-输入：
+Input:
   - article3/results/zp3_psi_pancancer_results/psi_immune_joined_samples.csv
-输出：
+Output:
   - article3/results/a3_robustness_frozen.csv
   - article3/results/a3_robustness_meta.csv
 """
@@ -39,13 +39,13 @@ import csv
 import math
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 层 = 项目根（实测验证）
+ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 levels = project root (empirically verified)
 JOINED = os.path.join(ROOT, "article3", "results", "zp3_psi_pancancer_results",
                       "psi_immune_joined_samples.csv")
 OUT1 = os.path.join(ROOT, "article3", "results", "a3_robustness_frozen.csv")
 OUT2 = os.path.join(ROOT, "article3", "results", "a3_robustness_meta.csv")
 
-assert os.path.isfile(JOINED), f"输入缺失: {JOINED}"
+assert os.path.isfile(JOINED), f"Input missing: {JOINED}"
 
 FL = "ENST00000336517.8"
 RI = "ENST00000466960.5"
@@ -57,7 +57,7 @@ EPS = 1e-9
 
 
 # ---------------------------------------------------------------------------
-# 统计基元（纯标准库）
+# Statistical primitives (pure standard library)
 # ---------------------------------------------------------------------------
 def f2(x):
     try:
@@ -67,7 +67,7 @@ def f2(x):
 
 
 def rankdata(vals):
-    """平均秩（处理并列）。vals: list[float]"""
+    """Average rank (handles ties). vals: list[float]"""
     order = sorted(range(len(vals)), key=lambda i: vals[i])
     ranks = [0.0] * len(vals)
     i = 0
@@ -75,7 +75,7 @@ def rankdata(vals):
         j = i
         while j + 1 < len(vals) and vals[order[j + 1]] == vals[order[i]]:
             j += 1
-        avg = (i + j) / 2.0 + 1.0  # 1-based 平均秩
+        avg = (i + j) / 2.0 + 1.0  # 1-based average rank
         for k in range(i, j + 1):
             ranks[order[k]] = avg
         i = j + 1
@@ -147,7 +147,7 @@ def betai(a, b, x):
 
 
 def corr_test(x, y):
-    """返回 (r, p_two_sided)，基于 t 分布精确 p 值。"""
+    """Return (r, p_two_sided), exact p-value based on t distribution."""
     r, n = _pearson_from(x, y)
     if n < 3:
         return r, 1.0
@@ -193,12 +193,12 @@ def paired(rows, key_x, key_y):
 
 def main():
     rows = load()
-    print(f"Joined 样本: {len(rows)}")
+    print(f"Joined samples: {len(rows)}")
 
     frozen = []  # tidy long
 
-    # ---- (1) Baseline: FL 比例 vs 7 免疫评分 ----
-    print("\n=== (1) Baseline: FL 比例 vs 免疫评分 ===")
+    # ---- (1) Baseline: FL proportion vs 7 immune scores ----
+    print("\n=== (1) Baseline: FL proportion vs immune scores ===")
     baseline = {}
     for s in IMMUNE:
         x, y = paired(rows, FL, s)
@@ -248,7 +248,7 @@ def main():
     })
     print(f"  Spearman(FL, RI) = {r_coup:+.3f} (p={p_coup:.1e})")
 
-    # ---- (4) Low-signal filter: 主导 isoform 比例 ≥ 0.5 ----
+    # ---- (4) Low-signal filter: dominant isoform proportion ≥ 0.5 ----
     print("\n=== (4) Low-signal filter (max isoform proportion >= 0.5) ===")
     kept = []
     for d in rows:
@@ -257,7 +257,7 @@ def main():
             continue
         if max(vals) >= 0.5:
             kept.append(d)
-    print(f"  保留样本: {len(kept)} / {len(rows)}")
+    print(f"  Retained samples: {len(kept)} / {len(rows)}")
     for s in IMMUNE:
         x, y = paired(kept, FL, s)
         r, p = spearman(x, y)
@@ -271,7 +271,7 @@ def main():
         })
         print(f"  {label(s):22s} n={len(x):5d}  rho={r:+.3f} (p={p:.1e})")
 
-    # ---- 写入 frozen CSV ----
+    # ---- Write frozen CSV ----
     cols = ["Analysis", "Metric", "Immune_score", "N", "Spearman_rho",
             "Spearman_p", "Pearson_r", "Pearson_p", "Note"]
     with open(OUT1, "w", newline="") as f:
@@ -279,9 +279,9 @@ def main():
         w.writeheader()
         for r in frozen:
             w.writerow(r)
-    print(f"\n冻结表1: {OUT1}")
+    print(f"\nFrozen table 1: {OUT1}")
 
-    # ---- Meta-analysis: 按癌种分层 Fisher-z 合并 ----
+    # ---- Meta-analysis: stratified by cancer type Fisher-z pooling ----
     print("\n=== Meta-analysis (cancer-stratified Fisher-z) ===")
     meta_cols = ["Score", "Cancer", "N", "Spearman_rho", "Spearman_p",
                  "Fisher_z", "Weight", "Q", "I2"]
@@ -304,7 +304,7 @@ def main():
             z = math.atanh(max(-0.9999, min(0.9999, r)))
             per.append((c, len(dd["x"]), r, p, z, len(dd["x"]) - 3))
         if len(per) < 2:
-            print(f"  {label(s)}: 可合并癌种 <2，跳过")
+            print(f"  {label(s)}: fewer than 2 mergeable cancer types, skip")
             continue
         Sw = sum(w for *_, w in per)
         Z = sum(z * w for *_, z, w in per) / Sw
@@ -336,33 +336,33 @@ def main():
         w.writeheader()
         for r in meta_rows:
             w.writerow(r)
-    print(f"冻结表2: {OUT2}")
+    print(f"Frozen table 2: {OUT2}")
 
-    # ---- 自检 ----
-    print("\n=== 自评 ===")
+    # ---- self-check ----
+    print("\n=== Self-evaluation ===")
     ok = True
     b_m2 = baseline["score_M2_Macrophage"][0]
     l_m2 = logratio["score_M2_Macrophage"][0]
     if b_m2 <= 0:
-        ok = False; print("  FAIL: baseline FL vs M2 应为正")
+        ok = False; print("  FAIL: baseline FL vs M2 should be positive")
     else:
-        print(f"  PASS: baseline FL vs M2 ρ={b_m2:+.3f} (与 mixed-model β=+0.28 方向一致)")
+        print(f"  PASS: baseline FL vs M2 ρ={b_m2:+.3f} (consistent with mixed-model β=+0.28 direction)")
     if l_m2 <= 0:
-        ok = False; print("  FAIL: log(FL/RI) vs M2 应为正")
+        ok = False; print("  FAIL: log(FL/RI) vs M2 should be positive")
     else:
-        print(f"  PASS: log(FL/RI) vs M2 ρ={l_m2:+.3f} (组成控制后方向不变)")
+        print(f"  PASS: log(FL/RI) vs M2 ρ={l_m2:+.3f} (direction unchanged after composition control)")
     if r_coup >= 0:
-        ok = False; print("  FAIL: FL-RI 应负相关（组成耦合）")
+        ok = False; print("  FAIL: FL-RI should be negatively correlated (compositional coupling)")
     else:
-        print(f"  PASS: FL-RI Spearman={r_coup:+.3f} (组成耦合，比例非独立丰度)")
+        print(f"  PASS: FL-RI Spearman={r_coup:+.3f} (compositional coupling, proportions not independent abundances)")
     # meta M2 pooled
     m2_pooled = [r for r in meta_rows if r["Score"] == "M2_Macrophage" and r["Cancer"] == "POOLED_fixed_effect"]
     if m2_pooled:
         pr = float(m2_pooled[0]["Spearman_rho"])
         if pr <= 0:
-            ok = False; print("  FAIL: M2 荟萃合并 ρ 应为正")
+            ok = False; print("  FAIL: M2 meta-analysis pooled ρ should be positive")
         else:
-            print(f"  PASS: M2 跨癌种荟萃 ρ={pr:+.3f}")
+            print(f"  PASS: M2 cross-cancer meta-analysis ρ={pr:+.3f}")
 
     print("\nRESULT:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)

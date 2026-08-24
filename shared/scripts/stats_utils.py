@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-共享统计工具 —— 单一、经验证的标准生存分析实现。
+Shared statistics tool —— a single, validated standard survival analysis implementation.
 
-设计目的（回应实证审查「致命②：两套不一致的手动 log-rank」与
-「严重：手动 log-rank 非标准库」）：
-  * 仅保留 ONE 个 logrank 实现，所有下游脚本统一 import 本模块，
-    杜绝 cbioportal / tcga 两套公式不一致。
-  * 优先使用 lifelines（经过同行评审的库）；不可用时回退到下面的
-    标准 Mantel-Haenszel 实现，该实现在 _self_test() 中与 lifelines
-    交叉验证（一致到 1e-6）。
+Design purpose (responding to empirical review "fatal ②: two inconsistent manual log-rank" and
+"serious: manual log-rank is not a standard library"):
+  * Keep only ONE logrank implementation, all downstream scripts uniformly import this module,
+    eliminate the inconsistency between the cbioportal / tcga two formula sets.
+  * Prefer lifelines (peer-reviewed library); fall back to the following if unavailable.
+    Standard Mantel-Haenszel implementation, which is cross-validated against lifelines in _self_test()
+    (consistent to 1e-6).
 
 API：
   logrank(durations, events, group) -> (chi2, p_value)
-      与旧脚本签名保持兼容，可直接替换。
-  logrank_detail(durations, events, group) -> dict  （含 n / 事件数 / 检验统计量）
+      Compatible with the old script signature, can be used as a direct replacement.
+  logrank_detail(durations, events, group) -> dict  (contains n / event count / test statistic)
 """
 import numpy as np
 from scipy import stats
@@ -26,8 +26,8 @@ except Exception:
 
 
 def _mantel_haenszel(durations, events, group):
-    """标准 log-rank（Mantel-Haenszel）。在每个【唯一】事件时间聚合，
-    正确处理结（ties）。返回 (chi2, p)。"""
+    """Standard log-rank (Mantel-Haenszel). Aggregate at each unique event time,
+    Correctly handle ties. Returns (chi2, p)."""
     d = np.asarray(durations, float)
     e = np.asarray(events, int)
     g = np.asarray(group, int)
@@ -64,10 +64,10 @@ def _mantel_haenszel(durations, events, group):
 
 
 def logrank(durations, events, group, use_lifelines=True):
-    """双侧 log-rank 检验。group 为 0/1 数组。返回 (chi2, p_value)。
+    """Two-sided log-rank test. group is a 0/1 array. Returns (chi2, p_value).
 
-    与旧脚本的 `logrank(durations, events, group)` 签名保持一致，
-    可直接替换两处不一致的旧实现。
+    Keep consistent with the signature of `logrank(durations, events, group)` in the old script,
+    It can directly replace two inconsistent old implementations.
     """
     d = np.asarray(durations, float)
     e = np.asarray(events, int)
@@ -78,9 +78,9 @@ def logrank(durations, events, group, use_lifelines=True):
         return 0.0, 1.0
 
     if use_lifelines and _HAS_LIFELINES:
-        # lifelines.logrank_test 签名为 (durations_A, durations_B,
-        #   event_observed_A, event_observed_B)；必须按分组拆成两组，
-        # 不能传 group= 关键字（该关键字不在此函数签名内）。
+        # The lifelines.logrank_test signature is (durations_A, durations_B,
+        #   event_observed_A, event_observed_B); must be split into two groups by group,
+        # Cannot pass a group= keyword (this keyword is not in this function signature).
         g1 = g == 1
         g0 = g == 0
         res = _lifelines_logrank(d[g1], d[g0],
@@ -90,7 +90,7 @@ def logrank(durations, events, group, use_lifelines=True):
 
 
 def logrank_detail(durations, events, group):
-    """返回 dict：chi2, p, n, n_group1, n_group0, events_group1, events_group0。"""
+    """Return dict: chi2, p, n, n_group1, n_group0, events_group1, events_group0."""
     d = np.asarray(durations, float)
     e = np.asarray(events, int)
     g = np.asarray(group, int)
@@ -110,7 +110,7 @@ def logrank_detail(durations, events, group):
 
 
 def _self_test():
-    """与 lifelines 交叉验证（若可用）。返回 True 表示一致。"""
+    """Cross-validate with lifelines (if available). Return True if consistent."""
     rng = np.random.default_rng(0)
     n = 200
     t = rng.exponential(scale=10, size=n)

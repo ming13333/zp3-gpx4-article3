@@ -1,25 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结② — SpliceSeq 代理验证（freeze_a3_spliceseq_validation）
+A3 Freeze② — SpliceSeq Proxy Validation (freeze_a3_spliceseq_validation)
 ================================================================
-目的：从独立输入（SpliceSeq PSI 下载 + 比例矩阵）复算 A3 图 2 全部统计量，
-      产出两张冻结表：
-        - a3_spliceseq_ecological.csv  （癌种级生态学 ρ/P + LOO + bootstrap CI）
-        - a3_spliceseq_samplelevel.csv （GBM/LGG 样本级各 AP 事件 Spearman/Pearson）
-      注：稿件中声明的 LOO ρ=0.93–0.96 与 bootstrap 95% CI 0.62–1.00
-      在此脚本内重新独立计算（原审计值已核对，脚本自包含）。
+Purpose: Recalculate all statistics of A3 Figure 2 from independent inputs (SpliceSeq PSI download + ratio matrix),
+      Produce two frozen tables:
+        - a3_spliceseq_ecological.csv  (cancer-type-level ecological ρ/P + LOO + bootstrap CI)
+        - a3_spliceseq_samplelevel.csv (GBM/LGG sample-level Spearman/Pearson for each AP event)
+      Note: The LOO ρ=0.93–0.96 and bootstrap 95% CI 0.62–1.00 reported in the manuscript
+      Recalculated independently within this script (original audit values have been checked; script is self-contained).
 
-输入：
+Input:
   - article3/data/spliceseq_zp3/PSI_download_{GBM,LGG,OV,STAD,COAD,DLBC,THYM,SKCM}.txt
   - article3/results/zp3_isoform_proportions.csv
   - article3/results/zp3_psi_pancancer_results/psi_pancancer_fingerprint.csv
-输出：
+Output:
   - article3/results/a3_spliceseq_ecological.csv
   - article3/results/a3_spliceseq_samplelevel.csv
 
-口径：事件-转录本映射与 zp3_spliceseq_validation.py 一致；
-生态学 = 癌种中位 Our_FL_PSI × SpliceSeq AP1 (as_id=80169) 中位 PSI。
+Definition: event-transcript mapping is consistent with zp3_spliceseq_validation.py;
+Ecology = cancer-type median Our_FL_PSI × SpliceSeq AP1 (as_id=80169) median PSI.
 """
 import os
 import sys
@@ -28,7 +28,7 @@ import pandas as pd
 from scipy import stats
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 层 = 项目根（实测验证）
+ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 levels = project root (verified empirically)
 SEQ_DIR = os.path.join(ROOT, "article3", "data", "spliceseq_zp3")
 PROP_CSV = os.path.join(ROOT, "article3", "results", "zp3_isoform_proportions.csv")
 FINGERPRINT_CSV = os.path.join(ROOT, "article3", "results",
@@ -60,7 +60,7 @@ def load_spliceseq(cancer):
 
 
 def ecological_analysis():
-    """癌种级生态学：Our_FL_PSI（指纹中位） × SpliceSeq AP1 中位 PSI。"""
+    """Cancer-level ecology: Our_FL_PSI (fingerprint median) × SpliceSeq AP1 median PSI."""
     eco_rows = []
     for cancer in ECO_CANCERS:
         df = pd.read_csv(os.path.join(SEQ_DIR, f"PSI_download_{cancer}.txt"), sep="\t")
@@ -81,7 +81,7 @@ def ecological_analysis():
     rho, p = stats.spearmanr(m["Our_FL_PSI"], m["SpliceSeq_AP1_PSI"])
     r_pear, p_pear = stats.pearsonr(m["Our_FL_PSI"], m["SpliceSeq_AP1_PSI"])
 
-    # LOO：每次移除一个癌种
+    # LOO: remove one cancer at a time
     loo = []
     for c in m["Cancer"]:
         mm = m[m["Cancer"] != c]
@@ -89,9 +89,9 @@ def ecological_analysis():
         loo.append({"Removed": c, "Spearman_rho": round(float(r2), 4)})
     loo_df = pd.DataFrame(loo)
 
-    # Bootstrap：10,000 次，样本级重采样 8 癌种。
-    # 策略：全量重采样，保留秩退化重采样（与 2026-08-14 审计脚本一致 → CI 0.62–1.00；
-    # 若剔除退化样本会得 0.73–1.00，勿用，以免与稿件声明不符）。
+    # Bootstrap: 10,000 times, sample-level resampling of 8 cancer types.
+    # Strategy: full resampling, retaining rank-degenerate resamples (consistent with 2026-08-14 audit script → CI 0.62–1.00;
+    # Removing degenerate samples would yield 0.73–1.00; do not use it, to avoid inconsistency with the manuscript statement).
     rng = np.random.default_rng(20260818)
     n_boot = 10000
     rhos = []
@@ -117,12 +117,12 @@ def ecological_analysis():
     }
     eco_df = pd.DataFrame([record])
     eco_df.to_csv(OUT_ECO, index=False)
-    print("=== 生态学（癌种级）===")
+    print("=== Ecology (cancer-level) ===")
     print(f"n={len(m)} | Spearman ρ={rho:+.4f} (p={p:.2e}) | Pearson r={r_pear:+.4f}")
-    print(f"LOO ρ 范围: {loo_df['Spearman_rho'].min():.3f}–{loo_df['Spearman_rho'].max():.3f} "
-          f"(列表: {loo_df['Spearman_rho'].tolist()})")
-    print(f"Bootstrap 95% CI: {ci[0]:.3f}–{ci[1]:.3f} ({n_boot} 次)")
-    print(f"冻结表: {OUT_ECO}")
+    print(f"LOO ρ range: {loo_df['Spearman_rho'].min():.3f}–{loo_df['Spearman_rho'].max():.3f} "
+          f"(List: {loo_df['Spearman_rho'].tolist()})")
+    print(f"Bootstrap 95% CI: {ci[0]:.3f}–{ci[1]:.3f} ({n_boot} times)")
+    print(f"Freeze table: {OUT_ECO}")
     return loo_df
 
 
@@ -168,9 +168,9 @@ def samplelevel_analysis():
             })
     res = pd.DataFrame(rows)
     res.to_csv(OUT_SAMPLE, index=False)
-    print("\n=== 样本级（GBM/LGG）===")
+    print("\n=== Sample-level (GBM/LGG) ===")
     print(res.to_string(index=False))
-    print(f"冻结表: {OUT_SAMPLE}")
+    print(f"Freeze table: {OUT_SAMPLE}")
     return res
 
 
@@ -181,32 +181,32 @@ def main():
     samp = samplelevel_analysis()
 
     ok = True
-    # 稿件核对
-    print("\n=== 与 v0.2 稿件核对 ===")
+    # manuscript check
+    print("\n=== Comparison with v0.2 manuscript ===")
     eco = pd.read_csv(OUT_ECO)
     rho_main = eco["Spearman_rho"].iloc[0]
     p_main = eco["Spearman_p"].iloc[0]
     if abs(rho_main - 0.95) > 0.01 or abs(np.log10(p_main) - (-3.6)) > 0.3:
         ok = False
-        print(f"  生态学 FAIL: ρ={rho_main} (稿 0.95) p={p_main:.2e} (稿 2.6e-4)")
+        print(f"  Ecology FAIL: ρ={rho_main} (manuscript 0.95) p={p_main:.2e} (manuscript 2.6e-4)")
     else:
-        print(f"  生态学 ρ={rho_main} p={p_main:.1e} PASS")
+        print(f"  Ecology ρ={rho_main} p={p_main:.1e} PASS")
     if not (0.90 <= eco["LOO_rho_min"].iloc[0] <= 0.94 and 0.95 <= eco["LOO_rho_max"].iloc[0] <= 0.97):
         ok = False
-        print(f"  LOO FAIL: {eco['LOO_rho_min'].iloc[0]}–{eco['LOO_rho_max'].iloc[0]} (稿 0.93–0.96)")
+        print(f"  LOO FAIL: {eco['LOO_rho_min'].iloc[0]}–{eco['LOO_rho_max'].iloc[0]} (manuscript 0.93–0.96)")
     else:
         print(f"  LOO {eco['LOO_rho_min'].iloc[0]}–{eco['LOO_rho_max'].iloc[0]} PASS")
     if not (0.50 <= eco["Bootstrap_CI_low"].iloc[0] <= 0.75 and 0.95 <= eco["Bootstrap_CI_high"].iloc[0] <= 1.01):
         ok = False
-        print(f"  Bootstrap CI FAIL: {eco['Bootstrap_CI_low'].iloc[0]}–{eco['Bootstrap_CI_high'].iloc[0]} (稿 0.62–1.00)")
+        print(f"  Bootstrap CI FAIL: {eco['Bootstrap_CI_low'].iloc[0]}–{eco['Bootstrap_CI_high'].iloc[0]} (manuscript 0.62–1.00)")
     else:
         print(f"  Bootstrap CI {eco['Bootstrap_CI_low'].iloc[0]}–{eco['Bootstrap_CI_high'].iloc[0]} PASS")
     rho_range = (samp["Spearman_rho"].min(), samp["Spearman_rho"].max())
     if not (0.10 <= rho_range[0] <= 0.20 and 0.45 <= rho_range[1] <= 0.60):
         ok = False
-        print(f"  样本级范围 FAIL: {rho_range} (稿 0.13–0.54)")
+        print(f"  Sample-level range FAIL: {rho_range} (manuscript 0.13–0.54)")
     else:
-        print(f"  样本级 ρ 范围 {rho_range[0]:.2f}–{rho_range[1]:.2f} PASS")
+        print(f"  Sample-level ρ range {rho_range[0]:.2f}–{rho_range[1]:.2f} PASS")
 
     print("\nRESULT:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)

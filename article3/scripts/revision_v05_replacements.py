@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Apply bridge-dual-review v0.5 revision replacements to Article3_A3英文初稿_v0.5.md."""
+"""Apply bridge-dual-review v0.5 revision replacements to Article3_A3English_draft_v0.5.md."""
 import io
 
-PATH = r"C:\D\workbuddy\科研\细胞外GPX4免疫抑制\article3\manuscripts\Article3_A3英文初稿_v0.5.md"
+PATH = r"C:\D\workbuddy\Research\Extracellular_GPX4_Immunosuppression\article3\manuscripts\Article3_A3English_draft_v0.5.md"
 
 pairs = [
 # R1 Results Fig2 proxy marker -> proxy definition

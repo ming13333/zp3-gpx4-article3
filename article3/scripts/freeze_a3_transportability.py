@@ -1,23 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结⑨ — 内部跨癌种迁移性验证（freeze_a3_transportability）
+A3 Freeze ⑨ — Internal cross-cancer transportability validation (freeze_a3_transportability)
 ================================================================
-目的：在不依赖外部权限数据的前提下，把「内部泛化性」验证做扎实：
-  A. LOCO（leave-one-cancer-out）—— 已在 freeze_a3_loco.py 冻结，此处重算并给出
-     与全量基线的方向/幅度对照（M2/Myeloid 两个 headline 评分）。
-  B. L2CO（leave-two-cancer-out）—— 任意两个癌种同时留出，检验合并 ρ 是否仍稳健
-     （比 LOCO 更严苛的敏感性分析，C(32,2)=496 对）。
-  C. 预设 held-out split —— 固定 seed=42、按癌种 70/30 随机分 train/val（按癌种分割
-     避免同癌种样本跨集泄漏）；train 集估计，val 集做独立方向检验。
-     强调：split 为预设（seed 固定、不按结果挑选），是内部 transportability
-     而非外部独立验证（外部 gene-level null 已冻结在 a3_external_gbm.csv）。
+Objective: Without relying on external permission-controlled data, solidify the "internal generalizability" validation:
+  A. LOCO (leave-one-cancer-out) — already frozen in freeze_a3_loco.py, recomputed here and provided
+     comparison of direction/magnitude with the full baseline (M2/Myeloid two headline scores).
+  B. L2CO (leave-two-cancer-out) — leave out any two cancer types simultaneously, test whether the combined ρ remains robust
+     (a more stringent sensitivity analysis than LOCO, C(32,2)=496 pairs).
+  C. Preset held-out split — fix seed=42, randomly split train/val 70/30 by cancer type (split by cancer type
+     to avoid leakage of same-cancer-type samples across sets); train set estimates, val set performs independent direction test.
+     Note: the split is preset (seed fixed, not selected based on results); it is internal transportability
+     rather than external independent validation (the external gene-level null has been frozen at a3_external_gbm.csv).
 
-仅对 M2_Macrophage 与 Myeloid 两个 headline 评分执行（与 robustness meta 口径一致）。
+Only run for the two headline scores M2_Macrophage and Myeloid (consistent with the robustness meta definition).
 
-输入：article3/results/zp3_psi_pancancer_results/psi_immune_joined_samples.csv
-输出：article3/results/a3_transportability_frozen.csv
-统计基元：纯标准库（同 freeze_a3_loco.py / freeze_a3_robustness.py）。
+Input: article3/results/zp3_psi_pancancer_results/psi_immune_joined_samples.csv
+# Output: article3/results/a3_transportability_frozen.csv
+# Statistical primitives: pure standard library (same as freeze_a3_loco.py / freeze_a3_robustness.py).
 """
 import os
 import sys
@@ -27,7 +27,7 @@ import random
 import itertools
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 层 = 项目根
+ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 levels = project root
 JOINED = os.path.join(ROOT, "article3", "results", "zp3_psi_pancancer_results",
                       "psi_immune_joined_samples.csv")
 OUT_CSV = os.path.join(ROOT, "article3", "results", "a3_transportability_frozen.csv")
@@ -38,7 +38,7 @@ IMMUNE = ["score_" + s for s in SCORES]
 
 
 # ---------------------------------------------------------------------------
-# 纯标准库统计基元（一致实现）
+# Pure standard library statistical primitives (consistent implementation)
 # ---------------------------------------------------------------------------
 def f2(x):
     try:
@@ -144,11 +144,11 @@ def load():
 
 # ---------------------------------------------------------------------------
 def main():
-    assert os.path.isfile(JOINED), f"输入缺失: {JOINED}"
+    assert os.path.isfile(JOINED), f"Input missing: {JOINED}"
     rows = load()
-    print(f"Joined 样本: {len(rows)}")
+    print(f"Joined samples: {len(rows)}")
 
-    # 按癌种分组
+    # Group by cancer type
     by_cancer = {}
     for d in rows:
         c = d.get("Cancer")
@@ -170,9 +170,9 @@ def main():
         by_cancer.setdefault(c, []).append(vals)
 
     cancers = sorted(by_cancer.keys())
-    print(f"癌种数: {len(cancers)}")
+    print(f"Number of cancer types: {len(cancers)}")
 
-    # 每癌种每评分 Spearman(FL, score)
+    # Spearman(FL, score) for each cancer type and score
     cancer_z = {}
     for c in cancers:
         cancer_z[c] = {}
@@ -219,8 +219,8 @@ def main():
             "Val_CI_crosses_zero": "" if val_r is None else ("YES" if lo < 0 < hi else "NO"),
         })
 
-    # ---- 全量基线 ----
-    print("\n=== 全量基线 ===")
+    # ---- Full baseline ----
+    print("\n=== Full baseline ===")
     for sc in IMMUNE:
         m = meta_over(cancers, sc)
         if m:
@@ -237,7 +237,7 @@ def main():
             if m:
                 pr, lo, hi, Q, I2, k = m
                 add_row("LOCO", sc, f"leave:{drop}", k, pr, lo, hi, Q, I2)
-    print(f"  LOCO 行数: {sum(1 for r in frozen if r['Analysis']=='LOCO')}")
+    print(f"  LOCO row count: {sum(1 for r in frozen if r['Analysis']=='LOCO')}")
 
     # ---- B. L2CO ----
     print("\n=== B. L2CO (leave-two-cancer-out) ===")
@@ -249,17 +249,17 @@ def main():
             if m:
                 pr, lo, hi, Q, I2, k = m
                 add_row("L2CO", sc, f"leave:{c1}+{c2}", k, pr, lo, hi, Q, I2)
-    print(f"  L2CO 行数: {sum(1 for r in frozen if r['Analysis']=='L2CO')} "
-          f"({len(pairs)} 对 × {len(IMMUNE)} 评分)")
+    print(f"  L2CO rows: {sum(1 for r in frozen if r['Analysis']=='L2CO')} "
+          f"({len(pairs)} pairs × {len(IMMUNE)} scores)")
 
-    # ---- C. 预设 held-out split（seed=42，按癌种 70/30）----
-    print("\n=== C. HELDOUT (prespecified, seed=42, 按癌种 70/30) ===")
+    # ---- C. Preset held-out split (seed=42, by cancer type 70/30) ----
+    print("\n=== C. HELDOUT (prespecified, seed=42, by cancer type 70/30) ===")
     rng = random.Random(42)
     shuffled = list(cancers)
     rng.shuffle(shuffled)
     n_train = int(round(len(shuffled) * 0.7))
     train_set, val_set = set(shuffled[:n_train]), set(shuffled[n_train:])
-    print(f"  train {len(train_set)} 癌种 / val {len(val_set)} 癌种")
+    print(f"  train {len(train_set)} cancer types / val {len(val_set)} cancer types")
     print(f"  train: {sorted(train_set)}")
     print(f"  val:   {sorted(val_set)}")
     for sc in IMMUNE:
@@ -270,7 +270,7 @@ def main():
             pr_v, lo_v, hi_v, Q_v, I2_v, k_v = m_va
             add_row("HELDOUT", sc, "train32-70_seed42", k_t, pr_t, lo_t, hi_t, Q_t, I2_t,
                     train_r=pr_t, val_r=pr_v)
-            # val 单独一行记录其 CI
+            # val record its CI on a separate line
             frozen.append({
                 "Analysis": "HELDOUT_VAL", "Score": sc, "Split": "val30_seed42", "K": k_v,
                 "Pooled_rho": round(pr_v, 4), "CI_low": round(lo_v, 4), "CI_high": round(hi_v, 4),
@@ -290,27 +290,27 @@ def main():
         w.writeheader()
         for r in frozen:
             w.writerow(r)
-    print(f"\n冻结表: {OUT_CSV} ({len(frozen)} 行)")
+    print(f"\nFrozen table: {OUT_CSV} ({len(frozen)} rows)")
 
-    # ---- 自检 ----
-    print("\n=== 自检 ===")
+    # ---- self-check ----
+    print("\n=== Self-check ===")
     ok = True
     base = {r["Score"]: r for r in frozen if r["Analysis"] == "BASELINE"}
     for sc in IMMUNE:
-        # L2CO 不应出现方向翻转（相对 baseline）
+        # L2CO should not have direction reversal (relative to baseline)
         flips_l2co = 0
         for r in frozen:
             if r["Analysis"] == "L2CO" and r["Score"] == sc:
                 b = base[sc]["Pooled_rho"]
                 if (b >= 0) != (r["Pooled_rho"] >= 0):
                     flips_l2co += 1
-        print(f"  L2CO {sc:16s} 方向翻转 {flips_l2co}/{len(pairs)} 对")
-        # HELDOUT 方向一致 + val CI 跨 0 为预期（样本少功效低，诚实报告）
+        print(f"  L2CO {sc:16s} direction flips {flips_l2co}/{len(pairs)} pairs")
+        # HELDOUT direction consistent + val CI crossing 0 is expected (small sample, low power, honest report)
         ho = [r for r in frozen if r["Analysis"] == "HELDOUT" and r["Score"] == sc]
         if ho and ho[0]["Same_direction"] != "YES":
-            print(f"  FAIL: HELDOUT {sc} train/val 方向不一致"); ok = False
-    print("  注：val 集仅 ~9 癌种，CI 较宽属预期；HELDOUT 为内部 transportability，"
-          "非外部独立验证（后者见 a3_external_gbm.csv）")
+            print(f"  FAIL: HELDOUT {sc} train/val direction mismatch"); ok = False
+    print("  Note: val set has only ~9 cancer types, wide CI is expected; HELDOUT is internal transportability, "
+          "not external independent validation (the latter see a3_external_gbm.csv)")
     print("\nRESULT:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)
 

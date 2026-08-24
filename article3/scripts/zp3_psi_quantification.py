@@ -1,29 +1,29 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Article 3：ZP3 转录本 PSI 定量 + 免疫关联
+Article 3: ZP3 transcript PSI quantification + immune association
 ============================================
-基于已就位的 Toil isoform TPM（TcgaTargetGtex_rsem_isoform_tpm.gz, 4.2G）
-对 ZP3 7 个转录本做 PSI（Percent Spliced In）定量：
+Based on the existing Toil isoform TPM (TcgaTargetGtex_rsem_isoform_tpm.gz, 4.2G)
+Perform PSI (Percent Spliced In) quantification for the 7 ZP3 transcripts:
   PSI_t = TPM(transcript t) / Σ_all ZP3 transcripts TPM
 
-分析：
-  1. 全 TCGA 肿瘤 vs GTEx 正常：PSI 差异（已有 tumor_vs_normal.csv，此处聚焦 GBM/LGG）
-  2. GBM(153) vs LGG(509)：PSI 类型间比较
-  3. **转录本级别免疫关联**：GBM/LGG 中每转录本 PSI 与免疫特征
-     (M2 / Treg / Checkpoint z-score 共识) 的 Spearman 相关 —— 回答
-     "哪个转录本驱动 ZP3-免疫抑制关联"
-  4. 关键异构体：ENST00000394860.3（5 外显子截短、肿瘤富集 22 倍）的
-     PSI 特异性关联
+Analysis:
+  1. All TCGA tumors vs GTEx normal: PSI differences (tumor_vs_normal.csv already exists, focusing here on GBM/LGG)
+  2. GBM(153) vs LGG(509): PSI comparison between tumor types
+  3. **Transcript-level immune association**: PSI of each transcript in GBM/LGG vs immune features
+     (M2 / Treg / Checkpoint z-score consensus) Spearman correlation — to answer
+     "which transcript drives the ZP3-immunosuppression association"
+  4. Key isoform: ENST00000394860.3 (5-exon truncated, tumor-enriched 22-fold)
+     PSI-specific association
 
-数据：
-  - zp3_isoform_proportions.csv（19131 样本 × 7 转录本，已由 real_quant 产出）
-  - h2_bulk/TCGA.GBM.sampleMap 与 TCGA.LGG.sampleMap（21 免疫基因 log2TPM）
+Data:
+  - zp3_isoform_proportions.csv (19131 samples × 7 transcripts, produced by real_quant)
+  - h2_bulk/TCGA.GBM.sampleMap and TCGA.LGG.sampleMap (21 immune genes log2TPM)
 
-产物：
-  psi_status_by_transcript.csv  —— GBM/LGG 各转录本 PSI 中位数 + GBM vs LGG MWU
-  psi_immune_correlation.csv    —— 各转录本 PSI × 免疫特征 Spearman
-  fig_zp3_psi_immune.png        —— 可视化
+Outputs:
+  psi_status_by_transcript.csv  —— GBM/LGG per-transcript PSI median + GBM vs LGG MWU
+  psi_immune_correlation.csv    —— Spearman correlation of each transcript PSI × immune feature
+  fig_zp3_psi_immune.png        —— visualization
 """
 import os
 import numpy as np
@@ -44,7 +44,7 @@ M2_GENES = ["MRC1", "CD163", "MSR1", "ARG1", "TGFB1", "IL10", "VSIG4"]
 TREG_GENES = ["FOXP3", "IL2RA", "CTLA4", "TIGIT"]
 CHECKPT_GENES = ["CD274", "PDCD1", "CTLA4", "HAVCR2", "LAG3"]
 
-# 转录本注释（real_quant 产物 + Ensembl 信息）
+# Transcript annotation (real_quant products + Ensembl info)
 TX_ANNOT = {
     "ENST00000336517.8": "FL 9-exon (canonical)",
     "ENST00000466960.5": "retained-intron",
@@ -57,7 +57,7 @@ TX_ANNOT = {
 
 
 def load_expr(cancer):
-    """GBM/LGG 21 基因表达：返回 DataFrame index=sample columns=gene (log2TPM)。"""
+    """GBM/LGG 21 gene expression: returns DataFrame index=sample columns=gene (log2TPM)."""
     p = os.path.join(H2, f"TCGA.{cancer}.sampleMap", "HiSeq_TCGA_gene.xena.gz")
     df = pd.read_csv(p, sep="\t", index_col=0, compression="gzip").T
     df.index.name = "sample"
@@ -65,11 +65,11 @@ def load_expr(cancer):
 
 
 def score_zs(genes, df):
-    """z-score 共识：每基因跨样本标准化后取均值。df 行为样本、列为基因。"""
+    """z-score consensus: each gene standardized across samples then averaged. df rows are samples, columns are genes."""
     avail = [g for g in genes if g in df.columns]
     if not avail:
         return pd.Series(np.nan, index=df.index)
-    sub = df[avail].astype(float).T       # 基因×样本
+    sub = df[avail].astype(float).T       # genes x samples
     v = sub.std(axis=1) > 0
     if not v.any():
         return pd.Series(np.nan, index=df.index)
@@ -87,26 +87,26 @@ def spearman_p(x, y):
 
 
 def main():
-    print("=== Article 3: ZP3 转录本 PSI 定量 + 免疫关联 ===\n")
+    print("=== Article 3: ZP3 transcript PSI quantification + immune association ===\n")
 
-    # 1. 载入 PSI 比例矩阵（19131 × 7）
+    # 1. Load PSI proportion matrix (19131 x 7)
     prop = pd.read_csv(PROP, index_col=0)
-    prop = prop[list(TX_ANNOT.keys())]          # 保持 7 转录本顺序
-    print(f"1. PSI 矩阵: {prop.shape[0]} 样本 × {prop.shape[1]} 转录本")
+    prop = prop[list(TX_ANNOT.keys())]          # Maintain the order of 7 transcripts
+    print(f"1. PSI matrix: {prop.shape[0]} samples × {prop.shape[1]} transcripts")
 
-    # 判别 TCGA 肿瘤（01 段）与 GTEx
+    # Distinguish TCGA tumors (01 segment) and GTEx
     tcga_tumor = [s for s in prop.index
                   if s.startswith("TCGA-") and s.split("-")[3].startswith("01")]
-    print(f"   TCGA 肿瘤样本: {len(tcga_tumor)}")
+    print(f"   TCGA tumor samples: {len(tcga_tumor)}")
 
-    # 2. 加载 GBM/LGG 表达
-    print("\n2. 加载 GBM/LGG 免疫表达...")
+    # 2. Load GBM/LGG expression
+    print("\n2. Load GBM/LGG immune expression...")
     expr = {c: load_expr(c) for c in ("GBM", "LGG")}
     for c, df in expr.items():
-        print(f"   {c}: {df.shape[0]} 样本 × {df.shape[1]} 基因")
+        print(f"   {c}: {df.shape[0]} samples × {df.shape[1]} genes")
 
-    # == 3. GBM/LGG 各转录本 PSI + 类型间比较 ==
-    print("\n3. GBM vs LGG PSI 比较...")
+    # == 3. PSI of each transcript in GBM/LGG + comparison between types ==
+    print("\n3. GBM vs LGG PSI comparison...")
     psi_status = []
     for c in ("GBM", "LGG"):
         sams = expr[c].index.intersection(prop.index)
@@ -134,10 +134,10 @@ def main():
                 "MWU_p": p})
     psi_df = pd.DataFrame(psi_status)
     psi_df.to_csv(os.path.join(OUT, "psi_status_by_transcript.csv"), index=False)
-    print(f"   已保存 psi_status_by_transcript.csv ({len(psi_df)} 行)")
+    print(f"   Saved psi_status_by_transcript.csv ({len(psi_df)} rows)")
 
-    # == 4. 转录本 PSI × 免疫特征关联 ==
-    print("\n4. 转录本 PSI × 免疫特征关联...")
+    # == 4. Transcript PSI × immune feature association ==
+    print("\n4. Transcript PSI × immune feature association...")
     rec = []
     for c in ("GBM", "LGG"):
         sams = expr[c].index.intersection(prop.index)
@@ -158,16 +158,16 @@ def main():
     corr["FDR"] = fdr
     corr["Significant"] = corr["FDR"] < 0.05
     corr.to_csv(os.path.join(OUT, "psi_immune_correlation.csv"), index=False)
-    print(f"   已保存 psi_immune_correlation.csv ({len(corr)} 条关联)")
-    print(f"   显著关联数(FDR<0.05): {corr['Significant'].sum()}")
+    print(f"   Saved psi_immune_correlation.csv ({len(corr)} associations)")
+    print(f"   Number of significant associations (FDR<0.05): {corr['Significant'].sum()}")
     sig = corr[corr["Significant"]]
     if len(sig):
-        print("\n   ------- 显著关联 -------")
+        print("\n   ------- Significant associations -------")
         print(sig[["Cancer", "GeneSet", "Transcript", "Annotation",
                    "Rho", "P", "FDR", "N"]].to_string(index=False))
 
-    # 关键异构体追踪：5-exon truncated (ENST00000394860.3)
-    print("\n=== 关键异构体追踪: ENST00000394860.3 (5-exon truncated) ===")
+    # Key isoform tracking: 5-exon truncated (ENST00000394860.3)
+    print("\n=== Key isoform tracking: ENST00000394860.3 (5-exon truncated) ===")
     for c in ("GBM", "LGG"):
         tx = "ENST00000394860.3"
         sams = expr[c].index.intersection(prop.index)
@@ -177,11 +177,11 @@ def main():
             rho, p, n = spearman_p(prop.loc[sams, tx].values, sc.values)
             print(f"   {c} {gset_name}: ρ={rho:+.3f}, p={p:.3e}, n={n}")
 
-    # == 5. 绘图 ==
-    print("\n5. 绘图...")
+    # == 5. Plotting ==
+    print("\n5. Plotting...")
     fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
 
-    # a) GBM vs LGG PSI 中位对比（仅主 4 转录本）
+    # a) GBM vs LGG PSI median comparison (only main 4 transcripts)
     ax = axes[0]
     main_tx = ["ENST00000336517.8", "ENST00000466960.5",
                "ENST00000394860.3", "ENST00000394857.7"]
@@ -201,7 +201,7 @@ def main():
     ax.set_title("ZP3 isoform PSI: GBM vs LGG")
     ax.legend()
 
-    # b) PSI×免疫关联热图
+    # b) PSI × immune correlation heatmap
     ax = axes[1]
     piv = corr.pivot_table(index="Transcript", columns=["Cancer", "GeneSet"],
                            values="Rho")
@@ -214,7 +214,7 @@ def main():
     ax.set_title("PSI × immune signature (Spearman ρ)")
     fig.colorbar(im, ax=ax, shrink=0.7)
 
-    # c) 关键异构体 PSI×免疫（主要看 94860.3）
+    # c) Key isoform PSI × immune (mainly 94860.3)
     ax = axes[2]
     tx_focus = "ENST00000394860.3"
     for c, col in [("GBM", "#A32D2D"), ("LGG", "#1D9E75")]:
@@ -233,9 +233,9 @@ def main():
     plt.tight_layout()
     fig_path = os.path.join(OUT, "fig_zp3_psi_immune.png")
     fig.savefig(fig_path, dpi=300, bbox_inches="tight")
-    print(f"   已保存 {fig_path}")
+    print(f"   Saved {fig_path}")
 
-    print("\n=== 完成 ===")
+    print("\n=== Done ===")
 
 
 if __name__ == "__main__":

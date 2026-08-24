@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-master_continue.py — 路径 A 阶段② 总控（FASTQ 齐备后运行一次）
+master_continue.py — Path A Stage ② master control (run once after FASTQ are ready)
 ================================================================
-前提：article3/data/external_reanalysis/fastq/ 下 24 个 FASTQ 已完整（download_fastq.py 完成）
-功能：
-  1. 检查 24 FASTQ 完整 + txome 完整；缺哪个先补哪个
-  2. 转录本下载（download_txome.py，8 段 Range + 重试）→ gzip 校验
-  3. 调用 run_external_kallisto_reanalysis.py（索引→24 样本量化→ZP3 FL/RI→
-     7 免疫评分→Spearman→冻结 a3_external_isoform_kallisto.csv→自检）
-用法：python article3/scripts/master_continue.py
+Prerequisite: the 24 FASTQ files under article3/data/external_reanalysis/fastq/ are complete (download_fastq.py done)
+Functions:
+  1. Check 24 FASTQ completeness + txome completeness; if either is missing, fill it first
+  2. Transcriptome download (download_txome.py, 8-segment Range + retry) → gzip verification
+  3. Call run_external_kallisto_reanalysis.py (index → 24-sample quantification → ZP3 FL/RI →
+     7 immune scores → Spearman → freeze a3_external_isoform_kallisto.csv → self-check)
+Usage: python article3/scripts/master_continue.py
 """
 import os
 import sys
@@ -53,25 +53,25 @@ def check_txome():
 
 def main():
     fq_ok = check_fastqs()
-    print(f"[1] FASTQ 完整 {len(fq_ok)}/24")
+    print(f"[1] FASTQ complete {len(fq_ok)}/24")
     if len(fq_ok) < 24:
-        print("    FASTQ 未齐（download_fastq.py 尚未完成），本次仅报告进度。")
-        print("    请等待 FASTQ 下载完成后重跑本脚本。")
+        print("    FASTQ not all present (download_fastq.py not yet complete); this run only reports progress.")
+        print("    Please wait until FASTQ download is complete and then rerun this script.")
         return 0 if len(fq_ok) >= 8 else 2
 
     tx_ok = check_txome()
-    print(f"[2] txome 完整: {tx_ok}")
+    print(f"[2] txome complete: {tx_ok}")
     if not tx_ok:
-        print("    启动 download_txome.py（转录本 8 段下载）...")
+        print("    Starting download_txome.py (transcriptome 8-segment download)...")
         r = subprocess.run([PY, os.path.join(RE, "download_txome.py")])
         if r.returncode != 0 or not check_txome():
-            print("FAIL: 转录本下载/校验失败")
+            print("FAIL: transcriptome download/verification failed")
             return 1
-        print("    转录本就绪")
+        print("    transcriptome ready")
 
-    print("[3] 运行完整重分析管线（索引→量化→分析→冻结）...")
+    print("[3] Running full reanalysis pipeline (index→quantification→analysis→freeze)...")
     r = subprocess.run([PY, os.path.join(BASE, "run_external_kallisto_reanalysis.py")])
-    print(f"[3] 管线退出码: {r.returncode}")
+    print(f"[3] pipeline exit code: {r.returncode}")
     return r.returncode
 
 

@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结④ — Mixed-effects isoform-immune 关联（freeze_a3_mixed_model.py）
+A3 Freeze ④ — Mixed-effects isoform-immune association (freeze_a3_mixed_model.py)
 ========================================================================
-目的：从长表（psi_immune_joined_samples.csv，9186 样本 × 32 癌种）独立复算
-      mixed-effects 模型（未调整 + 调整 ZP3 总表达），冻结为
-      a3_mixed_model_frozen.csv，供 Fig4 与正文引用。
+Purpose: Independently recompute from the long table (psi_immune_joined_samples.csv, 9186 samples × 32 cancer types)
+      mixed-effects model (unadjusted + adjusted for ZP3 total expression), frozen as
+      a3_mixed_model_frozen.csv, for citation in Fig4 and the main text.
 
-模型（与 zp3_mixed_model.py / zp3_mixed_model_adjusted.py 一致）：
-  - 未调整: score ~ PSI + (1 | Cancer)
-  - 调整后: score ~ PSI + ZP3_total + (1 | Cancer)
-  - 两转录本（FL / RI）× 7 免疫特征 = 14 行 × 2 组
-  - BH FDR 校正（手工实现，与原脚本一致）
+Model (consistent with zp3_mixed_model.py / zp3_mixed_model_adjusted.py):
+  - Unadjusted: score ~ PSI + (1 | Cancer)
+  - Adjusted: score ~ PSI + ZP3_total + (1 | Cancer)
+  - Two transcripts (FL / RI) × 7 immune features = 14 rows × 2 groups
+  - BH FDR correction (hand-implemented, consistent with original script)
 
-输入：
+Input:
   - article3/results/zp3_psi_pancancer_results/psi_immune_joined_samples.csv
-  - output/phase1_knowledge_gap_filling/gpx4_zp3_expr_matrix.csv（ZP3 总表达，按样本对齐）
-输出：
+  - output/phase1_knowledge_gap_filling/gpx4_zp3_expr_matrix.csv (ZP3 total expression, aligned by sample)
+Output:
   - article3/results/a3_mixed_model_frozen.csv
 """
 import os
@@ -26,7 +26,7 @@ import pandas as pd
 import statsmodels.formula.api as smf
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 层 = 项目根（实测验证）
+ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 levels = project root (verified)
 JOINED = os.path.join(ROOT, "article3", "results",
                       "zp3_psi_pancancer_results", "psi_immune_joined_samples.csv")
 EXPR = os.path.join(ROOT, "output", "phase1_knowledge_gap_filling", "gpx4_zp3_expr_matrix.csv")
@@ -100,15 +100,15 @@ def main():
     sizes = df["Cancer"].value_counts()
     keep = sizes[sizes >= 30].index
     df = df[df["Cancer"].isin(keep)].copy()
-    print(f"合并后: {len(df)} 样本 × {df['Cancer'].nunique()} 癌种（≥30 样本过滤后）")
+    print(f"After merging: {len(df)} samples × {df['Cancer'].nunique()} cancer types (after >=30 sample filter)")
 
     unadj = fit_models(df, "unadjusted")
     adj = fit_models(df, "adjusted_ZP3_total", add_total=True)
     out = pd.concat([unadj, adj], ignore_index=True)
     out.to_csv(OUT_CSV, index=False)
 
-    print(f"\n冻结表写入: {OUT_CSV} ({len(out)} 行)")
-    print("\n=== 关键数值（Fig4/正文引用）===")
+    print(f"Frozen table written: {OUT_CSV} ({len(out)} rows)")
+    print("\n=== Key values (Fig4/main text citation) ===")
     fl = out[(out["Transcript"] == FL) & (out["Model"] == "unadjusted")]
     fla = out[(out["Transcript"] == FL) & (out["Model"] == "adjusted_ZP3_total")]
     for _, r in fl.iterrows():
@@ -119,30 +119,30 @@ def main():
     ri = out[(out["Transcript"] == RI) & (out["Model"] == "unadjusted")]
     n_ri = ((ri["FDR"] < 0.05) & (ri["Coef"] < 0)).sum()
     n_fla = ((fla["FDR"] < 0.05) & (fla["Coef"] > 0)).sum()
-    print(f"\n未调整: FL 正显著 {n_fl}/7 | RI 负显著 {n_ri}/7")
-    print(f"调整总表达后: FL 正显著 {n_fla}/7")
+    print(f"\nUnadjusted: FL positive significant {n_fl}/7 | RI negative significant {n_ri}/7")
+    print(f"After adjusting for total expression: FL positive significant {n_fla}/7")
 
-    # 与稿件核对
+    # cross-check with manuscript
     checks = {
         "M2 unadj": (fl[fl["Feature"] == "M2_Macrophage"], 0.2822, 8.44e-35),
         "M2 adj": (fla[fla["Feature"] == "M2_Macrophage"], 0.2383, 8.14e-24),
         "Cytolytic unadj.p": (fl[fl["Feature"] == "Cytolytic_activity"], np.nan, 0.578),
     }
     ok_all = True
-    print("\n=== 与 v0.2 稿件核对 ===")
+    print("\n=== Check against v0.2 manuscript ===")
     for label, (sub, beta_exp, p_exp) in checks.items():
         r = sub.iloc[0]
         ok_b = pd.isna(beta_exp) or abs(r["Coef"] - beta_exp) < 0.001
         ok_p = abs(np.log10(r["P"]) - np.log10(p_exp)) < 0.3
         ok = bool(ok_b) and bool(ok_p)
         ok_all &= ok
-        print(f"  {label}: β={r['Coef']:.4f} (稿 {beta_exp}) p={r['P']:.2e} (稿 {p_exp:.1e}) "
+        print(f"  {label}: β={r['Coef']:.4f} (draft {beta_exp}) p={r['P']:.2e} (draft {p_exp:.1e}) "
               f"{'PASS' if ok else 'FAIL'}")
     if n_fl != 6 or n_ri != 6 or n_fla != 6:
         ok_all = False
-        print(f"  !! 显著计数不符: FL {n_fl}/6, RI {n_ri}/6, adj FL {n_fla}/6")
+        print(f"  !! Significant count mismatch: FL {n_fl}/6, RI {n_ri}/6, adj FL {n_fla}/6")
     else:
-        print(f"  FL/RI/adj-FL 均为 6/7 正/负显著 PASS")
+        print(f"  FL/RI/adj-FL are all 6/7 positive/negative significant PASS")
     print("\nRESULT:", "PASS" if ok_all else "FAIL")
     sys.exit(0 if ok_all else 1)
 

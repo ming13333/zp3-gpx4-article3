@@ -1,25 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结⑩ — 外部 isoform 级重分析（GEO GSE113474/PRJNA451200, kallisto）
+A3 Freeze ⑩ — External isoform-level reanalysis (GEO GSE113474/PRJNA451200, kallisto)
 ================================================================
-目的：在 TCGA/TARGET/GTEx 之外，对 24 例成人 GBM（GSE113474, NYU; Possemato lab,
-      PRJNA451200, 单端 HiSeq2500）的公开 FASTQ 做转录本级重分析（kallisto,
-      Ensembl GRCh38 cdna release-110），计算 ZP3 FL/RI 比例并检验
-      「isoform 比例 × 免疫评分」关联——这是 A3 首个真正的 isoform 级外部验证。
+Purpose: In addition to TCGA/TARGET/GTEx, for 24 adult GBM cases (GSE113474, NYU; Possemato lab,
+      PRJNA451200, public FASTQ of single-end HiSeq2500） for transcript-level reanalysis（kallisto,
+      Ensembl GRCh38 cdna release-110), calculate ZP3 FL/RI ratio and test
+      「isoform proportion × immune score」association——this is A3's first true isoform-level external validation.
 
-管线（纯标准库 + kallisto.exe）：
-  S1. 建索引: kallisto index -i txome/transcripts_k31.idx txome/Homo_sapiens.GRCh38.cdna.all.fa.gz
-      （若索引已存在则跳过）
-  S2. 量化: kallisto quant -i idx --single -l <read_len> -s 15 -t 4 -o out/<run> fastq/<run>.fastq.gz
-      （read_len 从每个样本第一条 read 自动检测；-t 4 并行，4 样本同时跑）
-  S3. 解析: 每样本 abundance.tsv → ZP3 各转录本 TPM + 免疫基因 TPM（z-score 共识评分）
-  S4. 关联: Spearman(ZP3 FL 比例 / RI 比例 / log(FL/RI), 7 免疫评分)
-  S5. 冻结: article3/results/a3_external_isoform_kallisto.csv
-  S6. 自检: 阳性 QC（CD8A↔Cytolytic、CD68↔CD163 应为正）+ ZP3 检出 + 方向对照
+Pipeline (pure standard library + kallisto.exe):
+  Build index: kallisto index -i txome/transcripts_k31.idx txome/Homo_sapiens.GRCh38.cdna.all.fa.gz
+      （Skip if index already exists）
+  Quantification: kallisto quant -i idx --single -l <read_len> -s 15 -t 4 -o out/<run> fastq/<run>.fastq.gz
+      （read_len is automatically detected from the first read of each sample; -t 4 runs 4 samples in parallel）
+  Parse: per-sample abundance.tsv → ZP3 per-transcript TPMs + immune gene TPMs（z-score consensus score）
+  Correlation: Spearman(ZP3 FL ratio / RI ratio / log(FL/RI), 7 immune scores)
+  S5. Freeze: article3/results/a3_external_isoform_kallisto.csv
+  S6. Self-check: positive QC (CD8A↔Cytolytic, CD68↔CD163 should be positive) + ZP3 detection + direction control
 
-输入：article3/data/external_reanalysis/fastq/*.fastq.gz（24 样本, 由 download_fastq.sh 获取）
-输出：article3/results/a3_external_isoform_kallisto.csv
+Input: article3/data/external_reanalysis/fastq/*.fastq.gz (24 samples, obtained by download_fastq.sh)
+Output: article3/results/a3_external_isoform_kallisto.csv
 """
 import os
 import sys
@@ -30,7 +30,7 @@ import subprocess
 import glob
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))          # 项目根
+ROOT = os.path.dirname(os.path.dirname(BASE))          # project root
 RE = os.path.join(ROOT, "article3", "data", "external_reanalysis")
 FASTQ_DIR = os.path.join(RE, "fastq")
 TXOME_GZ = os.path.join(RE, "txome", "Homo_sapiens.GRCh38.cdna.all.fa.gz")
@@ -39,9 +39,9 @@ OUT_DIR = os.path.join(RE, "out")
 OUT_CSV = os.path.join(ROOT, "article3", "results", "a3_external_isoform_kallisto.csv")
 KALLISTO = os.path.join(RE, "bin", "kallisto", "kallisto.exe")
 
-# ZP3 转录本（Ensembl GRCh38, 已在 zp3_isoform_real_quant.py 使用）
+# ZP3 transcripts (Ensembl GRCh38, already used in zp3_isoform_real_quant.py)
 ZP3_ISOFORMS = {
-    "ENST00000336517.8": "FL",     # 经典全长（肿瘤中比例升高）
+    "ENST00000336517.8": "FL",     # canonical full-length (elevated in tumors)
     "ENST00000466960.5": "RI",     # retained intron
     "ENST00000394860.3": "T5",     # 5-exon truncated
     "ENST00000467555.1": "T4",
@@ -164,7 +164,7 @@ def spearman(x, y):
 
 # ---------------------------------------------------------------------------
 def read_len_of(fastq_gz):
-    """读第一条 read 的序列长度（单端）"""
+    """Read the sequence length of the first read (single-end)"""
     with gzip.open(fastq_gz, "rt") as f:
         f.readline()  # @header
         seq = f.readline().strip()
@@ -173,15 +173,15 @@ def read_len_of(fastq_gz):
 
 def build_index():
     if os.path.isfile(IDX):
-        print(f"索引已存在: {IDX}"); return
-    assert os.path.isfile(TXOME_GZ), f"缺失转录本: {TXOME_GZ}"
-    print("建索引 (k31)...")
+        print(f"Index already exists: {IDX}"); return
+    assert os.path.isfile(TXOME_GZ), f"Missing transcriptome: {TXOME_GZ}"
+    print("Building index (k31)...")
     subprocess.run([KALLISTO, "index", "-i", IDX, TXOME_GZ], check=True)
-    print("索引完成")
+    print("Indexing complete")
 
 
 def parse_abundance(path):
-    """返回 {ENST(去版本): tpm}"""
+    """Return {ENST(version-stripped): tpm}"""
     out = {}
     with open(path) as f:
         rd = csv.DictReader(f, delimiter="\t")
@@ -197,7 +197,7 @@ def detect_fastqs():
 
 
 def check_inputs():
-    """下载就绪检查：FASTQ ≥24 且完整、txome 完整；不满足则提示进度并返回 False。"""
+    """Download readiness check: FASTQ ≥24 and complete, txome complete; otherwise show progress and return False."""
     missing = []
     fastqs = detect_fastqs()
     n_ok = 0
@@ -210,25 +210,25 @@ def check_inputs():
         except Exception:
             missing.append(os.path.basename(f))
     tx_ok = os.path.isfile(TXOME_GZ) and os.path.getsize(TXOME_GZ) > 800_000_000
-    print(f"[check] FASTQ 完整 {n_ok}/24 (不完整 {len(missing)}), txome {'OK' if tx_ok else '未就绪/不完整'}")
+    print(f"[check] FASTQ complete {n_ok}/24 (incomplete {len(missing)}), txome {'OK' if tx_ok else 'not ready/incomplete'}")
     if not tx_ok:
-        print("  txome 未完成: 等 download_txome.py 结束")
+        print("  txome not finished: wait for download_txome.py to finish")
     if n_ok < 24:
-        print(f"  FASTQ 未齐: 等 download_fastq.py 结束 (当前 {n_ok}/24)")
+        print(f"  FASTQ incomplete: wait for download_fastq.py to finish (currently {n_ok}/24)")
     return n_ok >= 24 and tx_ok
 
 
 def main():
-    assert os.path.isfile(KALLISTO), f"缺失 kallisto: {KALLISTO}"
+    assert os.path.isfile(KALLISTO), f"Missing kallisto: {KALLISTO}"
     if not check_inputs():
-        print("下载未完成，请稍后重跑本脚本（自动进入索引→量化→分析）")
+        print("Download incomplete, please rerun this script later (automatically enters index → quantification → analysis)")
         return 2
     fastqs = detect_fastqs()
-    print(f"检测到 FASTQ 样本: {len(fastqs)}")
+    print(f"Detected FASTQ samples: {len(fastqs)}")
 
     build_index()
 
-    # S2: 量化（4 路并行）
+    # S2: Quantification (4-way parallel)
     os.makedirs(OUT_DIR, exist_ok=True)
     todo = []
     for fq in fastqs:
@@ -236,7 +236,7 @@ def main():
         out_run = os.path.join(OUT_DIR, run, "abundance.tsv")
         if not os.path.isfile(out_run):
             todo.append((run, fq))
-    print(f"待量化: {len(todo)} / 总数 {len(fastqs)}")
+    print(f"Pending quantification: {len(todo)} / total {len(fastqs)}")
     procs = []
     for run, fq in todo:
         rl = read_len_of(fq)
@@ -253,18 +253,18 @@ def main():
         if p.returncode != 0:
             print(f"  FAIL quant {run}")
             return 1
-    print("量化完成")
+    print("Quantification completed")
 
-    # S3: 汇总样本级矩阵
+    # S3: Aggregate sample-level matrix
     samples = []
     for fq in fastqs:
         run = os.path.basename(fq).replace(".fastq.gz", "")
         ab = parse_abundance(os.path.join(OUT_DIR, run, "abundance.tsv"))
         samples.append((run, ab))
     n = len(samples)
-    print(f"样本数: {n}")
+    print(f"Number of samples: {n}")
 
-    # ZP3 isoform TPM 矩阵
+    # ZP3 isoform TPM matrix
     zp3_rows = {}
     for tid in ZP3_ISOFORMS:
         zp3_rows[tid] = [ab.get(tid, 0.0) for _, ab in samples]
@@ -276,17 +276,17 @@ def main():
     fl = prop("ENST00000336517")
     ri = prop("ENST00000466960")
     log_ratio = [math.log((fl[i] + 1e-9) / (ri[i] + 1e-9)) for i in range(n)]
-    print(f"ZP3 检出: {sum(1 for t in zp3_total if t > 0)}/{n} 样本; "
-          f"FL 比例范围 [{min(fl):.3f}, {max(fl):.3f}]")
+    print(f"ZP3 detected: {sum(1 for t in zp3_total if t > 0)}/{n} samples; "
+          f"FL ratio range [{min(fl):.3f}, {max(fl):.3f}]")
 
-    # gene symbol → ENST 映射（从 cdna header 解析，缓存）
+    # gene symbol → ENST mapping (parsed from cdna header, cached)
     sym_map = {}
     cache = os.path.join(RE, "txome", "sym2enst.json")
     if os.path.isfile(cache):
         import json
         sym_map = json.load(open(cache))
     else:
-        print("解析 cdna header 建 gene→ENST 映射...")
+        print("Parsing cdna header to build gene→ENST mapping...")
         with gzip.open(TXOME_GZ, "rt") as f:
             cur = None
             for line in f:
@@ -302,30 +302,30 @@ def main():
                     cur = sym
         import json
         json.dump(sym_map, open(cache, "w"))
-        print(f"映射基因数: {len(sym_map)}")
+        print(f"Mapped gene count: {len(sym_map)}")
 
-    # 免疫评分（z-score 共识）
+    # Immune score (z-score consensus)
     def gene_score(symbols):
         tids = []
         for s in symbols:
             tids.extend(sym_map.get(s, []))
-        # 聚合到基因 TPM
+        # Aggregate to gene TPM
         gene_tpm = {}
         for tid in tids:
             for i, (run, ab) in enumerate(samples):
                 v = ab.get(tid, 0.0)
                 gene_tpm.setdefault(i, 0.0)
-                gene_tpm[i] += v  # 转录本 TPM 求和近似基因 TPM
+                gene_tpm[i] += v  # transcript TPM sum approximates gene TPM
         vals = [gene_tpm[i] for i in range(n)]
         m = sum(vals) / n
         sd = math.sqrt(sum((v - m) ** 2 for v in vals) / n) or 1.0
         return [(v - m) / sd for v in vals]
 
-    # 基因级 TPM（免疫基因 + QC 标记）统一取各基因 TPM
+    # Gene-level TPM (immune genes + QC markers), unified per-gene TPM
     scores = {}
     for feat, genes in IMMUNE.items():
         scores[feat] = gene_score(genes)
-    # QC 标记单基因 TPM（CD8A/CD68/CD163 及 cytolytic 基因）
+    # QC marker single-gene TPM (CD8A/CD68/CD163 and cytolytic genes)
     def gene_tpm(symbol):
         tids = sym_map.get(symbol, [])
         out = []
@@ -338,9 +338,9 @@ def main():
     cd163 = gene_tpm("CD163")
     cyt = gene_score(["GZMA", "GZMB", "PRF1", "IFNG"])
 
-    # S4: Spearman 关联
+    # S4: Spearman correlation
     rows_out = []
-    print("\n=== ZP3 isoform 比例 × 免疫评分 (外部 GBM, kallisto) ===")
+    print("\n=== ZP3 isoform proportion × immune score (external GBM, kallisto) ===")
     for feat in IMMUNE:
         r_fl, p_fl = spearman(fl, scores[feat])
         r_ri, p_ri = spearman(ri, scores[feat])
@@ -363,33 +363,33 @@ def main():
             "Direction_vs_TCGA": "same" if r_lr > 0 else "opposite",
         })
 
-    # S5: 冻结
+    # S5: freeze
     with open(OUT_CSV, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows_out[0].keys()))
         w.writeheader()
         for r in rows_out:
             w.writerow(r)
-    print(f"\n冻结表: {OUT_CSV}")
+    print(f"\nFrozen table: {OUT_CSV}")
 
-    # S6: 自检
-    print("\n=== 自检 ===")
+    # S6: self-check
+    print("\n=== Self-check ===")
     ok = True
     r1, _ = spearman(cd8a, cyt)
     r2, _ = spearman(cd68, cd163)
     print(f"  QC Spearman(CD8A, Cytolytic)={r1:+.3f}  Spearman(CD68, CD163)={r2:+.3f}")
     if not (r1 > 0 and r2 > 0):
-        print("  FAIL: 免疫评分 QC 未通过"); ok = False
+        print("  FAIL: immune score QC failed"); ok = False
     else:
-        print("  PASS: 免疫评分有效")
+        print("  PASS: immune score valid")
     fl_nonzero = sum(1 for t in zp3_total if t > 0)
     if fl_nonzero < n * 0.8:
-        print(f"  WARN: ZP3 检出率低 ({fl_nonzero}/{n})")
-    # 方向对照 TCGA 内部：M2 FL 正、Myeloid FL 正
+        print(f"  WARN: ZP3 detection rate low ({fl_nonzero}/{n})")
+    # Direction comparison within TCGA: M2 FL positive, Myeloid FL positive
     for feat in ["M2_Macrophage", "Myeloid"]:
         row = [r for r in rows_out if r["Metric"] == "FL_proportion" and r["Feature"] == feat][0]
-        print(f"  {feat}: 外部 FL ρ={row['rho']:+.3f} ({row['Direction_vs_TCGA']} vs TCGA 内部 +)")
+        print(f"  {feat}: external FL ρ={row['rho']:+.3f} ({row['Direction_vs_TCGA']} vs TCGA internal +)")
         if row["Direction_vs_TCGA"] != "same":
-            print(f"  WARN: {feat} 方向与 TCGA 内部不一致（如实报告，不判失败）")
+            print(f"  WARN: {feat} direction inconsistent with TCGA internal (report as-is, not failure)")
     print("\nRESULT:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

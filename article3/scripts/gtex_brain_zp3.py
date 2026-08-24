@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-GTEx 正常脑对照分析: ZP3 正常 vs 肿瘤表达差异
+GTEx normal brain control analysis: ZP3 normal vs tumor expression difference
 
-数据源:
-1. GTEX_phenotype (Xena Toil hub) — GTEx 样本组织映射
-2. Toil isoform TPM (下载中) — ZP3 基因总 TPM = sum(isoform TPM)
-3. cBioPortal GBM/LGG gene expression (已有)
-4. HPA protein expression (已有)
+Data sources:
+1. GTEX_phenotype (Xena Toil hub) — GTEx sample tissue mapping
+2. Toil isoform TPM (downloading) — ZP3 gene total TPM = sum(isoform TPM)
+3. cBioPortal GBM/LGG gene expression (already available)
+4. HPA protein expression (already available)
 
-产出: ZP3 正常脑 vs GBM vs LGG 表达对比 + 差异倍数
+Output: ZP3 normal brain vs GBM vs LGG expression comparison + fold change
 """
 
 import pandas as pd
@@ -25,19 +25,19 @@ OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.pat
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ======================
-# 1. 下载 GTEX phenotype
+# 1. Download GTEX phenotype
 # ======================
 def download_gtex_phenotype():
-    """下载 GTEx 表型数据 (样本→组织)"""
-    print("[1/5] 下载 GTEx 表型数据...")
+    """Download GTEx phenotype data (sample -> tissue)"""
+    print("[1/5] Downloading GTEx phenotype data...")
     url = "https://toil.xenahubs.net/download/GTEX_phenotype.gz"
     local_path = os.path.join(DIR, "GTEX_phenotype.tsv")
     
     if os.path.exists(local_path) and os.path.getsize(local_path) > 1000:
-        print(f"  已有: {local_path}")
+        print(f"  Already exists: {local_path}")
         return local_path
     
-    print("  流式下载 + 解压...")
+    print("  Streaming download + decompression...")
     r = requests.get(url, stream=True, timeout=(30, 120))
     r.raise_for_status()
     
@@ -51,30 +51,30 @@ def download_gtex_phenotype():
             line, buffer = buffer.split(b"\n", 1)
             text_lines.append(line.decode("utf-8", errors="replace"))
     
-    # 写入文件
+    # Write to file
     with open(local_path, "w", encoding="utf-8") as f:
         for line in text_lines:
             f.write(line + "\n")
     
-    print(f"  已保存: {local_path} ({len(text_lines)} 行)")
+    print(f"  Saved: {local_path} ({len(text_lines)} lines)")
     return local_path
 
 def load_phenotype(path):
-    """加载 GTEx 表型, 筛选脑组织样本"""
-    print("\n[2/5] 筛选正常脑组织样本...")
+    """Load GTEx phenotype, filter brain tissue samples"""
+    print("\n[2/5] Filter normal brain tissue samples...")
     df = pd.read_csv(path, sep="\t", index_col=0)
-    print(f"  总 GTEx 样本: {len(df)}")
-    print(f"  列: {list(df.columns)}")
+    print(f"  Total GTEx samples: {len(df)}")
+    print(f"  Columns: {list(df.columns)}")
     
-    # 找组织相关列
+    # Find tissue-related columns
     tissue_cols = [c for c in df.columns if "tissue" in c.lower() or "site" in c.lower() or "body" in c.lower()]
     if tissue_cols:
-        print(f"  组织相关列: {tissue_cols[:5]}")
+        print(f"  Tissue-related columns: {tissue_cols[:5]}")
     
-    # 找脑组织
+    # Find brain tissue
     brain_col = None
     for col in df.columns:
-        # 查看该列是否含 brain
+        # Check if this column contains brain
         if df[col].dtype == object:
             brain_hits = df[col].astype(str).str.lower().str.contains("brain|brain_|cerebr|hippocamp|cortex|frontal|temporal|cerebell", na=False)
             if brain_hits.sum() > 10:
@@ -85,41 +85,41 @@ def load_phenotype(path):
         brain_terms = df[brain_col].astype(str).str.lower()
         is_brain = brain_terms.str.contains("brain|brain_|cerebr|hippocamp|cortex|frontal|temporal|cerebell", na=False)
         brain_samples = df[is_brain]
-        print(f"\n  脑组织列: {brain_col}")
-        print(f"  脑组织样本: {len(brain_samples)}")
+        print(f"\n  Brain tissue column: {brain_col}")
+        print(f"  Brain tissue samples: {len(brain_samples)}")
         
-        # 细分脑区
+        # Subdivide brain regions
         if df[brain_col].dtype == object:
             brain_regions = brain_samples[brain_col].value_counts().head(15)
-            print(f"  脑区分部:\n{brain_regions.to_string()}")
+            print(f"  Brain region distribution:\n{brain_regions.to_string()}")
         
         return brain_samples, brain_col
     else:
-        # 尝试所有列
-        print("  未找到专用组织列, 打印前几行样本...")
-        print(f"  前5行: {df.head(3)}")
+        # Try all columns
+        print("  No dedicated tissue column found, printing first few sample rows...")
+        print(f"  First 5 rows: {df.head(3)}")
         return df, None
 
 # ======================
-# 2. 从已下载的 ZP3 isoform 数据提取 GTEx 样本表达
+# 2. Extract GTEx sample expression from downloaded ZP3 isoform data
 # ======================
 def extract_gtex_zp3_expression(isoform_tsv, brain_samples):
-    """从 Toil isoform TPM 提取 GTEx 脑样本的 ZP3 总表达"""
-    print("\n[3/5] 提取 GTEx 脑样本 ZP3 表达...")
+    """Extract total ZP3 expression of GTEx brain samples from Toil isoform TPM"""
+    print("\n[3/5] Extracting ZP3 expression from GTEx brain samples...")
     
     isoform_path = os.path.join(DIR, isoform_tsv)
     if not os.path.exists(isoform_path):
-        print(f"  ⚠ isoform 数据尚未下载: {isoform_path}")
+        print(f"  ⚠ isoform data not downloaded yet: {isoform_path}")
         return None
     
     df_iso = pd.read_csv(isoform_path, sep="\t", index_col=0)
-    df_iso = df_iso.T  # 样本 × 转录本
+    df_iso = df_iso.T  # samples × transcripts
     
-    # 筛选 GTEx 样本
+    # Filter GTEx samples
     gtex_idx = [s for s in df_iso.index if str(s).startswith("GTEX")]
     df_gtex = df_iso.loc[gtex_idx]
     
-    # 计算总 TPM (log2 scale → TPM)
+    # Calculate total TPM (log2 scale → TPM)
     for col in df_gtex.columns:
         df_gtex[f"{col}_tpm"] = 2**df_gtex[col] - 0.001
     
@@ -127,24 +127,24 @@ def extract_gtex_zp3_expression(isoform_tsv, brain_samples):
     df_gtex["ZP3_TPM"] = df_gtex[tpm_cols].sum(axis=1)
     df_gtex["ZP3_TPM_log2"] = np.log2(df_gtex["ZP3_TPM"] + 0.001)
     
-    # 匹配脑组织样本
+    # Match brain tissue samples
     gtex_ids = set(brain_samples.index) if brain_samples is not None else set()
     brain_in_gtex = df_gtex.index.intersection(gtex_ids)
-    print(f"  脑组织样本在 isoform 数据中: {len(brain_in_gtex)}/{len(gtex_ids)}")
+    print(f"   Brain tissue samples in isoform data: {len(brain_in_gtex)}/{len(gtex_ids)}")
     
     df_brain = df_gtex.loc[brain_in_gtex] if len(brain_in_gtex) > 0 else df_gtex
     
     return df_brain, df_gtex
 
 # ======================
-# 3. 加载 cBioPortal GBM/LGG ZP3 表达
+# 3. Load cBioPortal GBM/LGG ZP3 expression
 # ======================
 def load_tcga_zp3_expression():
-    """从已有 cBioPortal 数据加载 TCGA GBM/LGG ZP3"""
-    print("\n[4/5] 加载 TCGA GBM/LGG ZP3 表达 (cBioPortal)...")
+    """Load TCGA GBM/LGG ZP3 from existing cBioPortal data"""
+    print("\n[4/5] Loading TCGA GBM/LGG ZP3 expression (cBioPortal)...")
     
-    # 从已有文件读取或在新建
-    # 使用 cBioPortal API 获取
+    # Read from existing file or create new
+    # Use cBioPortal API to obtain
     results = {}
     
     # ZP3 Entrez = 7784 (audited 2026-08-24; was erroneously 8277 = SP5)
@@ -161,11 +161,11 @@ def load_tcga_zp3_expression():
                 data = r.json()
                 values = {d['sampleId']: float(d['value']) for d in data}
                 results[study] = values
-                print(f"  {study}: {len(values)} 样本")
+                print(f"  {study}: {len(values)} samples")
         except Exception as e:
-            print(f"  {study}: 失败 {e}")
+            print(f"  {study}: failed {e}")
     
-    # 合并
+    # Merge
     df_tcga = pd.DataFrame()
     for study, values in results.items():
         proj = "GBM" if "gbm" in study else "LGG"
@@ -185,27 +185,27 @@ def load_tcga_zp3_expression():
     # log2
     df_tcga["ZP3_TPM_log2"] = np.log2(df_tcga["ZP3_TPM"] + 0.001)
     
-    print(f"  TCGA 总计: {len(df_tcga)} 样本")
+    print(f"  TCGA total: {len(df_tcga)} samples")
     return df_tcga
 
 # ======================
-# 4. 整合 + 可视化
+# 4. Integration + visualization
 # ======================
 def create_comparison(df_brain, df_tcga, gtex_all):
-    """创建正常 vs 肿瘤对比可视化 + 统计"""
-    print("\n[5/5] 正常 vs 肿瘤对比分析...")
+    """Create normal vs tumor comparison visualization + statistics"""
+    print("\n[5/5] Normal vs tumor comparison analysis...")
     
     fig = plt.figure(figsize=(14, 12))
     gs = plt.matplotlib.gridspec.GridSpec(3, 3, figure=fig, hspace=0.35, wspace=0.3)
     
-    # A: 箱线图 — GTEx Brain vs GBM vs LGG
+    # A: Boxplot — GTEx Brain vs GBM vs LGG
     ax1 = fig.add_subplot(gs[0, :])
     
     plot_data = []
     labels = []
     colors = []
     
-    # GTEx 脑
+    # GTEx brain
     if df_brain is not None and len(df_brain) > 0:
         vals = df_brain["ZP3_TPM" if "ZP3_TPM" in df_brain.columns else df_brain.columns[0]]
         plot_data.append(vals.dropna().values)
@@ -228,7 +228,7 @@ def create_comparison(df_brain, df_tcga, gtex_all):
             labels.append(f"TCGA-LGG\n(n={len(lgg_vals)})")
             colors.append("#3498DB")
     
-    # 箱线图
+    # Boxplot
     bp = ax1.boxplot(plot_data, patch_artist=True, widths=0.5, showfliers=True, flierprops={'alpha': 0.3, 'markersize': 3})
     for patch, c in zip(bp["boxes"], colors):
         patch.set_facecolor(c)
@@ -239,7 +239,7 @@ def create_comparison(df_brain, df_tcga, gtex_all):
     ax1.set_title("A. ZP3 Expression: Normal Brain vs GBM vs LGG", fontsize=14, fontweight='bold')
     ax1.set_yscale("log")
     
-    # 计算差异倍数
+    # Calculate fold change
     if len(plot_data) >= 2:  # GTEx + GBM
         gtex_median = np.median(plot_data[0]) if len(plot_data) > 0 else None
         fold_changes = []
@@ -252,7 +252,7 @@ def create_comparison(df_brain, df_tcga, gtex_all):
                     transform=ax1.transAxes, ha='right', va='top', fontsize=10,
                     bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
     
-    # B: 密度图
+    # B: Density plot
     ax2 = fig.add_subplot(gs[1, :2])
     for i, (data, label, c) in enumerate(zip(plot_data, labels, colors)):
         if len(data) > 1:
@@ -262,7 +262,7 @@ def create_comparison(df_brain, df_tcga, gtex_all):
     ax2.set_title("B. ZP3 Expression Distribution (log2 scale)", fontsize=13, fontweight='bold')
     ax2.legend()
     
-    # C: 统计摘要表
+    # C: Statistical summary table
     ax3 = fig.add_subplot(gs[1, 2])
     ax3.axis('off')
     summary_lines = ["Group      n    Median  Mean"]
@@ -274,7 +274,7 @@ def create_comparison(df_brain, df_tcga, gtex_all):
             va='top', fontfamily='monospace')
     ax3.set_title("C. Expression Statistics", fontsize=12, fontweight='bold')
     
-    # D: 统计检验
+    # D: Statistical test
     ax4 = fig.add_subplot(gs[2, :])
     tests = []
     ax4.axis('off')
@@ -283,7 +283,7 @@ def create_comparison(df_brain, df_tcga, gtex_all):
     
     # GBM vs GTEx Brain
     if len(plot_data) >= 2 and len(plot_data[0]) > 0 and len(plot_data[1]) > 0:
-        # GTEx 是 plot_data[0], GBM 是 plot_data[1]
+        # GTEx is plot_data[0], GBM is plot_data[1]
         stat, p = stats.mannwhitneyu(plot_data[1], plot_data[0], alternative='two-sided')
         fc = np.median(plot_data[1]) / (np.median(plot_data[0]) + 1e-10)
         test_text += f"GBM vs GTEx Brain:  FC={fc:.1f}, p={p:.2e}  {'***' if p<0.001 else '**' if p<0.01 else '*' if p<0.05 else 'ns'}\n"
@@ -303,17 +303,17 @@ def create_comparison(df_brain, df_tcga, gtex_all):
             va='top', fontfamily='monospace')
     ax4.set_title("D. Statistical Comparison", fontsize=12, fontweight='bold')
     
-    # 保存
+    # Save
     fig_path = os.path.join(OUTPUT_DIR, "fig_zp3_normal_vs_tumor.png")
     fig.savefig(fig_path, dpi=200, bbox_inches="tight")
-    print(f"  图表: {fig_path}")
+    print(f"  Figure: {fig_path}")
     plt.close()
     
     return fig_path
 
 def save_results(gtex_brain, df_tcga, fold_changes):
-    """保存结果 CSV"""
-    # GTEx 脑数据
+    """Save results CSV"""
+    # GTEx brain data
     if gtex_brain is not None:
         gtex_brain.to_csv(os.path.join(OUTPUT_DIR, "gtex_brain_zp3_expression.csv"))
     
@@ -321,9 +321,9 @@ def save_results(gtex_brain, df_tcga, fold_changes):
     if df_tcga is not None:
         df_tcga.to_csv(os.path.join(OUTPUT_DIR, "tcga_zp3_expression.csv"))
     
-    # 摘要
+    # Summary
     summary_path = os.path.join(OUTPUT_DIR, "normal_vs_tumor_summary.csv")
-    # 收集统计
+    # Collect statistics
     rows = []
     for grp, data in [("GTEx_Brain", gtex_brain), ("TCGA_GBM", df_tcga[df_tcga["Project"]=="GBM"] if df_tcga is not None else None), ("TCGA_LGG", df_tcga[df_tcga["Project"]=="LGG"] if df_tcga is not None else None)]:
         if data is not None and len(data) > 0:
@@ -331,25 +331,25 @@ def save_results(gtex_brain, df_tcga, fold_changes):
             vals = data[col].dropna()
             rows.append({"Group": grp, "n": len(vals), "Mean": vals.mean(), "Median": vals.median(), "Std": vals.std()})
     pd.DataFrame(rows).to_csv(summary_path, index=False)
-    print(f"  摘要: {summary_path}")
+    print(f"  Summary: {summary_path}")
 
 def main():
     print("=" * 60)
-    print("GTEx 正常脑对照: ZP3 正常 vs 肿瘤表达差异")
+    print("GTEx normal brain control: ZP3 normal vs tumor expression differences")
     print("=" * 60)
     
     # 1. GTEx phenotype
     phenotype_path = download_gtex_phenotype()
     brain_samples, brain_col = load_phenotype(phenotype_path)
     
-    # 2. 提取 ZP3 表达
+    # 2. Extract ZP3 expression
     import zlib  # for gzip decompression in download
     df_brain = extract_gtex_zp3_expression("zp3_toil_isoform_tpm.tsv", brain_samples)
     
     # 3. TCGA
     df_tcga = load_tcga_zp3_expression()
     
-    # 4. 对比
+    # 4. Comparison
     fc = None
     if df_brain is not None and df_tcga is not None:
         gtex_med = df_brain["ZP3_TPM"].median() if "ZP3_TPM" in df_brain.columns else 0
@@ -359,8 +359,8 @@ def main():
     fig_path = create_comparison(df_brain, df_tcga, None)
     save_results(df_brain, df_tcga, fc)
     
-    print(f"\n✓ GTEx 正常脑对照分析完成!")
-    print(f"  产物目录: {OUTPUT_DIR}")
+    print(f"\n✓ GTEx normal brain control analysis completed!")
+    print(f"  Output directory: {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     import zlib  # early import for download function

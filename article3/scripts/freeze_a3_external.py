@@ -1,39 +1,39 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结⑥ — 外部独立队列验证（freeze_a3_external）
+A3 Freeze⑥ — External independent cohort validation (freeze_a3_external)
 ================================================================
-目的：在 TCGA/TARGET/GTEx 与 SpliceSeq 之外，用两个独立 GBM 队列在基因级
-      复现「ZP3 ↔ 免疫抑制特征」关联，为 A3 的 isoform proxy 提供外部
-      生物学一致性（biological coherence）证据，并如实声明边界：
-      「公开资源中不存在 TCGA/TARGET/GTEx 之外的 isoform 级 bulk 肿瘤队列，
-       因此外部验证针对 proxy 的生物学前提（ZP3–免疫关联）在基因级进行」。
+Objective: Beyond TCGA/TARGET/GTEx and SpliceSeq, use two independent GBM cohorts at the gene level
+      to reproduce the association between ZP3 and immunosuppressive features, providing external
+      biological coherence evidence for A3's isoform proxy, and honestly state the boundary:
+      “No isoform-level bulk tumor cohort outside TCGA/TARGET/GTEx exists in public resources,
+       therefore the external validation targets the biological premise of the proxy (ZP3–immune association) at the gene level.”
 
-外部队列（均为公开 GEO，独立于 TCGA/CGGA/GLASS）：
-  - GSE77530（MD Anderson，32 例成人 GBM；Gabrusiewicz 2016 JCI Insight，
-    RPKM 级表达谱，基因符号行）
-  - GSE113474（NYU，24 例 IDH-WT GBM；Garcia-Bermudez 2018 Nat Cell Biol，
-    归一化 counts，基因符号行）
+External cohorts (all public GEO, independent of TCGA/CGGA/GLASS):
+  - GSE77530 (MD Anderson, 32 adult GBM; Gabrusiewicz 2016 JCI Insight,
+    RPKM-level expression profiles, gene symbol rows)
+  - GSE113474 (NYU, 24 IDH-WT GBM; Garcia-Bermudez 2018 Nat Cell Biol,
+    normalized counts, gene symbol rows)
 
-免疫评分：与 zp3_psi_pancancer.py / freeze_a3_robustness.py 完全一致
-  - 7 特征免疫签名（同一套基因集）
-  - z-score 共识：每基因跨样本标准化后取均值（对 GSE77530 的 RPKM 与
-    GSE113474 的 counts 尺度差异不敏感，因按基因内跨样本标准化）
-  - VSIR 在两类矩阵中均缺失 → 评分时自动剔除（T_exhaustion/Checkpoint
-    用剩余基因）
+Immune score: exactly the same as zp3_psi_pancancer.py / freeze_a3_robustness.py
+  - 7-feature immune signature (same gene set)
+  - z-score consensus: average after standardizing each gene across samples (insensitive to GSE77530 RPKM and
+    GSE113474 counts scale differences, because standardization is per-gene across samples)
+  - VSIR is missing in both matrix types → automatically excluded when scoring (T_exhaustion/Checkpoint
+    uses remaining genes)
 
-统计：
-  - 每队列内 Spearman(ZP3 表达, 各免疫评分)，p 值 t 分布精确校正（betai）
-  - 跨队列固定效应 Fisher-z 荟萃（k=2，权重 n−3），报告合并 ρ、95% CI、Q、I²
-  - 自检：两队列 M2/Myeloid 方向一致性（符号一致）；合并 ρ 与 TCGA
-    总表达分析方向对照（ZP3 与免疫抑制特征正相关）
+Statistics:
+  - Within each cohort, Spearman(ZP3 expression, each immune score); p-value exact adjusted via t-distribution (betai)
+  - Cross-cohort fixed-effect Fisher-z meta-analysis (k=2, weight n−3); report pooled ρ, 95% CI, Q, I²
+  - Self-check: direction consistency of M2/Myeloid across the two cohorts (same sign); pooled ρ vs TCGA
+    comparison of overall expression analysis direction (ZP3 positively correlated with immunosuppressive features)
 
-实现：纯标准库（无 pandas/scipy），与 freeze_a3_robustness.py 同一统计基元。
+Implementation: pure standard library (no pandas/scipy), same statistical primitives as freeze_a3_robustness.py.
 
-输入：
+Input:
   - article3/data/external_gbm/GSE77530_GBM_AH_32_RSEQ_expression_profile.txt.gz
   - article3/data/external_gbm/GSE113474_counts.norm.csv.gz
-输出：
+Output:
   - article3/results/a3_external_gbm.csv
 """
 import os
@@ -43,7 +43,7 @@ import gzip
 import math
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 层 = 项目根（实测验证）
+ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 levels = project root (verified)
 EXT_DIR = os.path.join(ROOT, "article3", "data", "external_gbm")
 OUT_CSV = os.path.join(ROOT, "article3", "results", "a3_external_gbm.csv")
 
@@ -180,7 +180,7 @@ def load_matrix(path, delim):
 
 
 def zscore_consensus(rows, genes):
-    """每基因跨样本 z-score 后取均值。返回样本级评分列表（与样本序一致）。"""
+    """Per-gene z-score across samples, then take the mean. Returns sample-level score list (consistent with sample order)."""
     present = [g for g in genes if g in rows]
     if len(present) < max(3, len(genes) // 2):
         return None, present
@@ -203,11 +203,11 @@ def zscore_consensus(rows, genes):
 
 def main():
     assert os.path.isfile(GSE77530), (
-        f"缺失: {GSE77530}\n请从 GEO 下载后放入 {EXT_DIR}（原始矩阵按仓库约定 git-ignored）：\n"
+        f"Missing: {GSE77530}\nPlease download from GEO and place in {EXT_DIR} (raw matrix is git-ignored per repo convention):\n"
         "  https://ftp.ncbi.nlm.nih.gov/geo/series/GSE77nnn/GSE77530/suppl/"
         "GSE77530_GBM_AH_32_RSEQ_expression_profile.txt.gz")
     assert os.path.isfile(GSE113474), (
-        f"缺失: {GSE113474}\n请从 GEO 下载后放入 {EXT_DIR}（原始矩阵按仓库约定 git-ignored）：\n"
+        f"Missing: {GSE113474}\nPlease download from GEO and place in {EXT_DIR} (raw matrix is git-ignored per repo convention):\n"
         "  https://ftp.ncbi.nlm.nih.gov/geo/series/GSE113nnn/GSE113474/suppl/"
         "GSE113474_counts.norm.csv.gz")
 
@@ -217,11 +217,11 @@ def main():
     ]
     rows_out = []
     per_cohort = {}   # cohort -> {feature: rho}
-    print("=== 外部 GBM 队列：ZP3 × 免疫评分 Spearman ===")
+    print("=== External GBM cohort: ZP3 × immune score Spearman ===")
     for name, path, delim, unit in cohorts:
         samples, mat = load_matrix(path, delim)
         if "ZP3" not in mat:
-            print(f"  {name}: ZP3 缺失，跳过"); continue
+            print(f"  {name}: ZP3 missing, skip"); continue
         zp3 = mat["ZP3"]
         n = len(samples)
         print(f"\n{name}: n={n} samples, unit={unit}, ZP3 range "
@@ -231,7 +231,7 @@ def main():
         for feat, genes in IMMUNE.items():
             score, used = zscore_consensus(mat, genes)
             if score is None:
-                print(f"  {feat:18s} 评分基因不足（used {len(used)}）跳过")
+                print(f"  {feat:18s} insufficient scoring genes (used {len(used)}); skipping")
                 continue
             r, p = spearman(zp3, score)
             per_cohort[name][feat] = (r, p)
@@ -242,8 +242,8 @@ def main():
             })
             print(f"  {feat:18s} rho={r:+.3f} (p={p:.1e})  genes={len(used)}")
 
-    # ---- Fisher-z 荟萃（跨队列）----
-    print("\n=== 跨队列 Fisher-z 荟萃（k=2）===")
+    # ---- Fisher-z meta-analysis (cross-cohort) ----
+    print("\n=== cross-cohort Fisher-z meta-analysis (k=2) ===")
     for feat in IMMUNE:
         entries = [(name, per_cohort[name][feat]) for name in per_cohort
                    if feat in per_cohort[name]]
@@ -286,17 +286,17 @@ def main():
         w.writeheader()
         for r in rows_out:
             w.writerow(r)
-    print(f"\n冻结表: {OUT_CSV}")
+    print(f"\nFrozen table: {OUT_CSV}")
 
-    # ---- 自检（QC 有效性 + 诚实报告 null，不强推正方向）----
-    print("\n=== 自检 ===")
+    # ---- self-check (QC validity + honestly report null, not forcing positive direction) ----
+    print("\n=== Self-check ===")
     ok = True
     gse = per_cohort.get("GSE77530_MDAnderson", {})
     nyu = per_cohort.get("GSE113474_NYU", {})
     if not gse or not nyu:
-        print("FAIL: 队列数据缺失"); sys.exit(1)
+        print("FAIL: cohort data missing"); sys.exit(1)
 
-    # QC 1: 免疫评分生物学有效性（CD8A ↔ Cytolytic 应为正；CD68 ↔ CD163 应为正）
+    # QC 1: biological validity of immune score (CD8A ↔ Cytolytic should be positive; CD68 ↔ CD163 should be positive)
     qc_pass = True
     for name, path, delim in [("GSE77530_MDAnderson", GSE77530, "\t"),
                               ("GSE113474_NYU", GSE113474, ",")]:
@@ -305,7 +305,7 @@ def main():
         cd68 = mat.get("CD68")
         cd163 = mat.get("CD163")
         if cd8a is None or cd68 is None or cd163 is None:
-            print(f"  QC FAIL {name}: 标记基因缺失"); qc_pass = False; continue
+            print(f"  QC FAIL {name}: marker genes missing"); qc_pass = False; continue
         cyt_genes = [g for g in ["GZMA", "GZMB", "PRF1", "IFNG"] if g in mat]
         score, _ = zscore_consensus(mat, cyt_genes)
         r1, _ = spearman(cd8a, score)
@@ -315,25 +315,25 @@ def main():
         print(f"  QC {name}: Spearman(CD8A,Cytolytic)={r1:+.3f} Spearman(CD68,CD163)={r2:+.3f} "
               f"→ {'PASS' if ok_qc else 'FAIL'}")
     if not qc_pass:
-        print("FAIL: 免疫评分 QC 未通过（管线不可信）"); ok = False
+        print("FAIL: immune score QC failed (pipeline unreliable)"); ok = False
 
-    # QC 2: 方向一致性（如实打印；null 是结果，不判为失败）
+    # QC 2: direction consistency (report honestly; null is a result, not a failure)
     n_null = 0
     for feat in ["M2_Macrophage", "Myeloid", "T_cell_exhaustion", "Checkpoint"]:
         r1 = gse.get(feat, (0, 1))[0]
         r2 = nyu.get(feat, (0, 1))[0]
         same = (r1 >= 0 and r2 >= 0) or (r1 < 0 and r2 < 0)
         sig = abs(r1) < 0.19 or abs(r2) < 0.19
-        print(f"  {feat:18s} MDAnderson={r1:+.3f} NYU={r2:+.3f} 方向一致={'YES' if same else 'NO'} "
+        print(f"  {feat:18s} MDAnderson={r1:+.3f} NYU={r2:+.3f} same_direction={'YES' if same else 'NO'} "
               f"|ρ|<0.19 → null")
         if not sig:
             n_null += 0
     pooled = [r for r in rows_out if r["Analysis"] == "pooled" and r["Feature"] == "M2_Macrophage"]
     if pooled:
-        print(f"  合并 M2 rho={pooled[0]['ZP3_Spearman_rho']} "
+        print(f"  Merged M2 rho={pooled[0]['ZP3_Spearman_rho']} "
               f"(95% CI {pooled[0]['Pooled_CI_low']}–{pooled[0]['Pooled_CI_high']}) "
-              f"—— 基因级外部复制为 null，如实记录")
-    print("  注：null 为真实外部结果（QC 通过），写入冻结表与稿件 Limitations，不选择性报告")
+              f"—— Gene-level external replication is null, record as is")
+    print("  Note: null is the real external result (QC passed), written into frozen table and manuscript Limitations, not selectively reported")
 
     print("\nRESULT:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)

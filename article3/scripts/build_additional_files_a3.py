@@ -1,20 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-build_additional_files_a3.py — A3 BMC Bioinformatics 投稿 Additional files 汇编
+build_additional_files_a3.py — A3 BMC Bioinformatics submission Additional files compilation
 ================================================================
-把冻结 CSV 汇编为 BMC 兼容的 Additional file xlsx（每表一个独立文件）：
+Compile frozen CSVs into BMC-compatible Additional file xlsx (one independent file per table):
 
   Additional file 1 → Supplementary Table S1 (Compositional controls)
-                      来源: a3_robustness_frozen.csv
+                      Source: a3_robustness_frozen.csv
   Additional file 2 → Supplementary Table S2 (Cancer-stratified meta-analysis)
-                      来源: a3_robustness_meta.csv
+                      Source: a3_robustness_meta.csv
   Additional file 3 → Supplementary Table S3 (External cohorts + null diagnostics
-                       + transportability)  来源: a3_external_gbm.csv +
+                       + transportability)  Source: a3_external_gbm.csv +
                        a3_external_null_diagnostics.csv + a3_transportability_frozen.csv
 
-输出: article3/results/additional_files/A3_AdditionalFile{1,2,3}.xlsx
-依赖: openpyxl（本环境已装 3.1.5）
+Output: article3/results/additional_files/A3_AdditionalFile{1,2,3}.xlsx
+Dependency: openpyxl (3.1.5 already installed in this environment)
 """
 import os
 import csv
@@ -73,7 +73,7 @@ def sheet_from_rows(ws, rows):
     for i, row in enumerate(rows[1:], 2):
         for j, v in enumerate(row, 1):
             ws.cell(row=i, column=j, value=v).alignment = wrap
-    # 列宽
+    # Column widths
     for j in range(1, len(rows[0]) + 1):
         col_vals = [len(str(r[j - 1])) for r in rows[1:20] if len(r) >= j] or [8]
         width = min(max(col_vals) * 1.2 + 2, 60)
@@ -94,30 +94,30 @@ def main():
             rows = load_csv(csv_path)
             ws = wb.create_sheet(title=name[:31])
             sheet_from_rows(ws, rows)
-        # Info 移到最前
+        # Move Info to the front
         wb.move_sheet("Info", offset=-(len(spec["sheets"])))
         out = os.path.join(OUT_DIR, spec["file"])
         wb.save(out)
         sz = os.path.getsize(out)
         print(f"OK  {spec['file']}  ({sz/1024:.1f} KB, sheets: {[n for n,_ in spec['sheets']]})")
 
-    # 清单
-    manifest = os.path.join(OUT_DIR, "A3_AdditionalFiles_清单.md")
+    # Manifest
+    manifest = os.path.join(OUT_DIR, "A3_AdditionalFiles_manifest.md")
     lines = [
-        "# A3 BMC Bioinformatics — Additional Files 清单（2026-08-18 汇编）",
+        "# A3 BMC Bioinformatics — Additional Files Manifest (compiled 2026-08-18)",
         "",
-        "| 文件 | 对应稿件 | 内容 | 来源冻结表 |",
+        "| File | Corresponding Manuscript | Content | Source Frozen Table |",
         "|---|---|---|---|",
-        "| A3_AdditionalFile1.xlsx | Supplementary Table S1 | FL–免疫关联的组成控制（log-ratio / FL–RI 耦合 / 低信号过滤） | a3_robustness_frozen.csv |",
-        "| A3_AdditionalFile2.xlsx | Supplementary Table S2 | 32 癌种分层固定效应荟萃（M2/Myeloid，95% CI，Q，I²） | a3_robustness_meta.csv |",
-        "| A3_AdditionalFile3.xlsx | Supplementary Table S3 | 外部基因级队列 + null 诊断 + 内部跨癌种迁移性（L2CO/held-out） | a3_external_gbm.csv, a3_external_null_diagnostics.csv, a3_transportability_frozen.csv |",
+        "| A3_AdditionalFile1.xlsx | Supplementary Table S1 | FL–immune association compositional controls (log-ratio / FL–RI coupling / low-signal filtering) | a3_robustness_frozen.csv |",
+        "| A3_AdditionalFile2.xlsx | Supplementary Table S2 | 32 cancer-type stratified fixed-effect meta-analysis (M2/Myeloid, 95% CI, Q, I²) | a3_robustness_meta.csv |",
+        "| A3_AdditionalFile3.xlsx | Supplementary Table S3 | External gene-level cohort + null diagnostics + internal cross-cancer transportability (L2CO/held-out) | a3_external_gbm.csv, a3_external_null_diagnostics.csv, a3_transportability_frozen.csv |",
         "",
-        "注：每个 xlsx 首 sheet 为文件说明（Info），数据 sheet 为对应冻结表（完整列、未截断）。",
-        "BMC 硬约束：单个 Additional file ≤20 MB（当前各 <100 KB，通过）。",
+        "Note: The first sheet of each xlsx is the file description (Info); the data sheet is the corresponding frozen table (full columns, untruncated).",
+        "BMC hard constraint: single Additional file ≤20 MB (currently each <100 KB, passed).",
     ]
     with open(manifest, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"OK  清单: {manifest}")
+    print(f"OK  Manifest: {manifest}")
     return 0
 
 

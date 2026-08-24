@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-Article 3 — 跨癌种 ZP3 异构体 PSI 特异性比较
+Article 3 — Pan-cancer ZP3 isoform PSI specificity comparison
 =============================================
-在 TCGA 泛癌中比较 7 个 ZP3 转录本的 PSI（percent spliced in）指纹，并检验
-转录本 PSI 与免疫特征关联的跨癌种模式：
+Compare PSI (percent spliced in) fingerprints of 7 ZP3 transcripts across TCGA pan-cancer, and test
+Pan-cancer patterns of transcript PSI associations with immune features:
 
-  1) PSI 指纹热图（32 癌种 × 7 转录本，中位 PSI）
-  2) per-cancer 转录本 PSI × 免疫特征 Spearman（32 × 7 × 7 = 1568 条）
-  3) 生态学分析：癌种级 FL-PSI / RI-PSI 中位 × ZP3-免疫关联强度(Avg_Rho)
-  4) 异构体切换指数 log2(FL_PSI / RI_PSI) 跨癌种排序
+  1) PSI fingerprint heatmap (32 cancer types × 7 transcripts, median PSI)
+  2) per-cancer transcript PSI × immune feature Spearman (32 × 7 × 7 = 1568 associations)
+  3) Ecological analysis: cancer-level FL-PSI / RI-PSI median × ZP3-immune association strength (Avg_Rho)
+  4) Isoform switch index log2(FL_PSI / RI_PSI) pan-cancer ranking
 
-数据源（全部本地）：
-  - zp3_isoform_proportions.csv （19131 样本 × 7 转录本 PSI）
-  - TcgaTargetGtex_rsem_gene_tpm.gz（1.3G 本地 TPM，免疫基因提取）
-  - tcga_disease_map.json（样本 barcode -> 癌种）
-  - ensg_map.json（symbol -> Ensembl 缓存）
+Data sources (all local):
+  - zp3_isoform_proportions.csv (19131 samples × 7 transcript PSI)
+  - TcgaTargetGtex_rsem_gene_tpm.gz (1.3G local TPM, immune gene extraction)
+  - tcga_disease_map.json (sample barcode -> cancer type)
+  - ensg_map.json (symbol -> Ensembl cache)
 
-产物目录：zp3_psi_pancancer_results/
+Output directory: zp3_psi_pancancer_results/
 """
 import os
 import sys
@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))      # 项目根
+ROOT = os.path.dirname(os.path.dirname(BASE))      # project root
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(BASE))), "article3", "results", "zp3_psi_pancancer_results")
 os.makedirs(OUT, exist_ok=True)
 
@@ -42,7 +42,7 @@ DISEASE_MAP = os.path.join(ROOT, "output", "tcga_pancan", "tcga_disease_map.json
 ENSG_CACHE = os.path.join(ROOT, "output", "tcga_pancan", "ensg_map.json")
 SUMMARY_CSV = os.path.join(ROOT, "output", "tcga_pancan", "tcga_pancan_cancer_summary.csv")
 
-# 与 tcga_pancan_zp3_analysis.py 完全一致的免疫基因集
+# Immune gene set identical to tcga_pancan_zp3_analysis.py
 IMMUNE_GENE_SETS = {
     'M2_Macrophage': ['CD163', 'MSR1', 'MRC1', 'VSIG4', 'CD200R1', 'TGFB1', 'IL10',
                       'ARG1', 'MERTK', 'CLEC7A'],
@@ -54,7 +54,7 @@ IMMUNE_GENE_SETS = {
     'Checkpoint': ['CD274', 'PDCD1', 'CTLA4', 'LAG3', 'TIGIT', 'HAVCR2', 'BTLA', 'VSIR'],
     'Myeloid': ['CD68', 'CD163', 'CSF1R', 'ITGAM', 'CD14', 'LYZ', 'S100A8', 'S100A9'],
 }
-# 转录本语义标签
+# Transcript semantic labels
 TX_LABEL = {
     "ENST00000336517.8": "FL canonical (9-exon)",
     "ENST00000466960.5": "Retained-intron",
@@ -64,7 +64,7 @@ TX_LABEL = {
     "ENST00000416245.5": "Mid isoform",
     "ENST00000479793.5": "Alt-terminal isoform",
 }
-FL = "ENST00000336517.8"   # 经典全长
+FL = "ENST00000336517.8"   # canonical full-length
 RI = "ENST00000466960.5"   # retained-intron
 
 
@@ -75,12 +75,12 @@ def get_ensg_map(symbols):
 
 
 def read_target_genes(path, target_strip):
-    """流式读取 TPM 中目标基因（target_strip: ensg去版本 -> symbol 或 ensg）。"""
+    """Stream-read target genes in TPM (target_strip: ensg without version -> symbol or ensg)."""
     rows = {}
     with gzip.open(path, "rt") as f:
         first = f.readline()
         samples = first.rstrip("\n").split("\t")[1:]
-        print(f"    共 {len(samples)} 个样本")
+        print(f"    Total {len(samples)} samples")
         n = 0
         while True:
             lines = f.readlines(65536)
@@ -93,12 +93,12 @@ def read_target_genes(path, target_strip):
                     rows[target_strip[gid]] = [float(x) for x in parts[1:]]
             n += len(lines)
             if n % 200000 == 0:
-                print(f"    已扫描 {n} 个基因行...")
+                print(f"    Scanned {n} gene rows...")
     return pd.DataFrame.from_dict(rows, orient="index", columns=samples)
 
 
 def zscore_consensus_score(mat_gx_s, ensgs):
-    """z-score 共识：每基因跨样本标准化后取均值（与泛癌脚本一致）。返回样本级 Series。"""
+    """z-score consensus: take the mean after per-gene cross-sample standardization (consistent with the pan-cancer script). Returns sample-level Series."""
     sub = mat_gx_s.loc[ensgs]
     gene_mean = sub.mean(axis=1)
     gene_std = sub.std(axis=1)
@@ -110,32 +110,32 @@ def zscore_consensus_score(mat_gx_s, ensgs):
 
 
 def main():
-    print("=== Article 3: 跨癌种 ZP3 异构体 PSI 特异性比较 ===\n")
+    print("=== Article 3: Pan-cancer ZP3 isoform PSI specificity comparison ===\n")
 
-    # ---- 1. PSI 矩阵 ----
-    print("1. 读取 PSI 比例矩阵 ...")
+    # ---- 1. PSI matrix ----
+    print("1. Reading PSI proportion matrix ...")
     psi = pd.read_csv(PROP_CSV, index_col=0)
     psi.columns = [c.strip() for c in psi.columns]
-    print(f"   PSI 矩阵 {psi.shape[0]} 样本 × {psi.shape[1]} 转录本")
+    print(f"   PSI matrix {psi.shape[0]} samples × {psi.shape[1]} transcripts")
 
-    # ---- 2. 免疫基因 TPM（流式）----
+    # ---- 2. Immune gene TPM (streaming) ----
     all_symbols = sorted({g for s in IMMUNE_GENE_SETS.values() for g in s})
     sym2ensg = get_ensg_map(all_symbols)
     unresolved = [s for s, e in sym2ensg.items() if not e]
     if unresolved:
-        print(f"  !! 未解析免疫基因: {unresolved}")
+        print(f"  !! Unresolved immune genes: {unresolved}")
     target_ids = [e for e in sym2ensg.values() if e]
-    print(f"2. 流式读取真实 TPM（{len(target_ids)} 个免疫基因）...")
+    print(f"2. Streaming read real TPM ({len(target_ids)} immune genes)...")
     t0 = time.time()
     mat = read_target_genes(DATA_TPM, {e: e for e in target_ids})
-    print(f"   读取完成 {mat.shape[0]} 基因 × {mat.shape[1]} 样本，耗时 {time.time()-t0:.1f}s")
+    print(f"   Read complete {mat.shape[0]} genes × {mat.shape[1]} samples, elapsed {time.time()-t0:.1f}s")
 
-    # ---- 3. 免疫评分（全 TCGA 肿瘤样本）----
+    # ---- 3. Immune score (all TCGA tumor samples) ----
     samples = list(mat.columns)
     tcga_mask = [s.startswith("TCGA-") and s.split("-")[3].startswith("01") for s in samples]
     tcga_samples = [s for s, m in zip(samples, tcga_mask) if m]
     mat_t = mat[tcga_samples]
-    print(f"3. TCGA 肿瘤样本 {len(tcga_samples)} 个，计算 7 特征 z-score 共识评分 ...")
+    print(f"3. TCGA tumor samples {len(tcga_samples)}, calculating 7-feature z-score consensus score ...")
 
     with open(DISEASE_MAP) as f:
         p2cancer = json.load(f)
@@ -151,9 +151,9 @@ def main():
             continue
         for s in tcga_samples:
             score_mat.setdefault(s, {})[set_name] = float(sc[s])
-    print(f"   完成评分，{len(score_mat)} 个样本有评分")
+    print(f"   Scoring complete, {len(score_mat)} samples have scores")
 
-    # ---- 4. join PSI + 免疫评分 + 癌种 ----
+    # ---- 4. join PSI + immune score + cancer type ----
     rec = []
     for s in tcga_samples:
         if s not in psi.index or s not in score_mat:
@@ -168,13 +168,13 @@ def main():
             r[f"score_{fname}"] = v
         rec.append(r)
     df = pd.DataFrame(rec)
-    print(f"4. 合并后 {len(df)} 样本（PSI × 免疫评分 × 癌种）")
+    print(f"4. After merging {len(df)} samples (PSI × immune score × cancer type)")
     if len(df) == 0:
-        print("!! 合并为空，退出"); sys.exit(1)
+        print("!! Merge is empty, exiting"); sys.exit(1)
     df.to_csv(os.path.join(OUT, "psi_immune_joined_samples.csv"), index=False)
 
-    # ---- 5. per-cancer 转录本 PSI × 免疫特征关联 ----
-    print("5. per-cancer 转录本 PSI × 免疫特征 Spearman ...")
+    # ---- 5. per-cancer transcript PSI × immune feature association ----
+    print("5. per-cancer transcript PSI × immune feature Spearman ...")
     rows = []
     for c, grp in df.groupby("Cancer"):
         if len(grp) < 30:
@@ -200,34 +200,34 @@ def main():
         else:
             corr.loc[g.index, "FDR"] = g["P_value"].values
     corr.to_csv(os.path.join(OUT, "psi_immune_pancancer_correlation.csv"), index=False)
-    print(f"   {len(corr)} 条关联，覆盖 {corr['Cancer'].nunique()} 癌种")
+    print(f"   {len(corr)} associations, covering {corr['Cancer'].nunique()} cancer types")
     n_sig = (corr["FDR"] < 0.05).sum()
-    print(f"   显著(FDR<0.05): {n_sig} 条")
+    print(f"   Significant (FDR<0.05): {n_sig} records")
 
-    # FL 转录本跨癌种方向一致性
+    # FL transcript cross-cancer direction consistency
     fl = corr[corr["Transcript"] == FL]
     fl_pos_sig = ((fl["FDR"] < 0.05) & (fl["Rho"] > 0)).sum()
     fl_neg_sig = ((fl["FDR"] < 0.05) & (fl["Rho"] < 0)).sum()
     fl_all = len(fl)
-    print(f"   FL 关联: {fl_all} 条，正显著 {fl_pos_sig} / 负显著 {fl_neg_sig}")
+    print(f"   FL associations: {fl_all} records, positive significant {fl_pos_sig} / negative significant {fl_neg_sig}")
     ri = corr[corr["Transcript"] == RI]
     ri_pos_sig = ((ri["FDR"] < 0.05) & (ri["Rho"] > 0)).sum()
     ri_neg_sig = ((ri["FDR"] < 0.05) & (ri["Rho"] < 0)).sum()
-    print(f"   RI 关联: {len(ri)} 条，正显著 {ri_pos_sig} / 负显著 {ri_neg_sig}")
+    print(f"   RI associations: {len(ri)} records, positive significant {ri_pos_sig} / negative significant {ri_neg_sig}")
 
-    # ---- 6. 癌种级 PSI 指纹 + 生态学 ----
-    print("6. 癌种级 PSI 指纹与生态学分析 ...")
+    # ---- 6. cancer-level PSI fingerprint + ecology ----
+    print("6. cancer-level PSI fingerprint and ecology analysis ...")
     fp = df.groupby("Cancer")[list(psi.columns)].median()
     fp["N"] = df.groupby("Cancer").size()
     fp = fp.reset_index().rename(columns={"index": "Cancer"})
     fp = fp.sort_values(FL, ascending=False)
     fp.to_csv(os.path.join(OUT, "psi_pancancer_fingerprint.csv"), index=False)
 
-    # 切换指数 per-sample 后取癌种中位
+    # Switch index per-sample then take cancer-type median
     df["switch_index"] = np.log2((df[FL].clip(lower=1e-6)) / (df[RI].clip(lower=1e-6)))
     sw = df.groupby("Cancer")["switch_index"].median().reset_index()
 
-    # 生态学：与泛癌 Avg_Rho 合并
+    # Ecology: merge with pan-cancer Avg_Rho
     summ = pd.read_csv(SUMMARY_CSV)
     eco = fp.merge(summ, left_on="Cancer", right_on="Cancer_Code", how="inner")
     eco = eco.merge(sw, on="Cancer")
@@ -238,15 +238,15 @@ def main():
         m = np.isfinite(x) & np.isfinite(y)
         if m.sum() >= 5:
             rho, p = stats.spearmanr(x[m], y[m])
-            print(f"   生态学相关: {lab}-PSI 中位 × ZP3-免疫 Avg_Rho: ρ={rho:+.3f}, p={p:.3f}, n={m.sum()}")
+            print(f"   Ecological correlation: {lab}-PSI median × ZP3-immune Avg_Rho: ρ={rho:+.3f}, p={p:.3f}, n={m.sum()}")
         x2 = eco["switch_index"].values
         rho2, p2 = stats.spearmanr(x2[m], y[m])
-        print(f"   生态学相关: switch_index × Avg_Rho: ρ={rho2:+.3f}, p={p2:.3f}")
+        print(f"   Ecological correlation: switch_index × Avg_Rho: ρ={rho2:+.3f}, p={p2:.3f}")
 
-    # ---- 7. 图 ----
-    print("7. 绘图 ...")
+    # ---- 7. Figure ----
+    print("7. Plotting ...")
     plot_figure(fp, eco, corr)
-    print("\n=== 完成，产物在", OUT, "===")
+    print("\n=== Done, outputs in", OUT, "===")
 
 
 def _bh(pvals):
@@ -268,7 +268,7 @@ def _bh(pvals):
 def plot_figure(fp, eco, corr):
     fig = plt.figure(figsize=(15, 11))
 
-    # (a) PSI 指纹热图
+    # (a) PSI fingerprint heatmap
     ax = fig.add_subplot(2, 2, 1)
     tx_cols = list(TX_LABEL.keys())
     data = fp.set_index("Cancer")[tx_cols]
@@ -280,13 +280,13 @@ def plot_figure(fp, eco, corr):
     ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=9)
     ax.set_title(f"(a) ZP3 PSI fingerprint (n={len(fp)} cancers)", fontsize=12)
 
-    # (b) 生态学：FL-PSI × Avg_Rho
+    # (b) Ecological: FL-PSI × Avg_Rho
     ax = fig.add_subplot(2, 2, 2)
     x = eco[FL].values.astype(float); y = eco["Avg_Rho"].values.astype(float)
     m = np.isfinite(x) & np.isfinite(y)
     rho, p = stats.spearmanr(x[m], y[m])
     ax.scatter(x[m], y[m], s=55, alpha=0.8, c="#378ADD", edgecolor="white")
-    # 高亮胶质瘤
+    # Highlight glioma
     for cname, mk in [("GBM", "o"), ("LGG", "s")]:
         sub = eco[eco["Cancer"] == cname]
         if len(sub):
@@ -303,7 +303,7 @@ def plot_figure(fp, eco, corr):
     ax.legend(fontsize=8)
     ax.axhline(0, color="grey", lw=0.6, ls=":")
 
-    # (c) 生态学：RI-PSI × Avg_Rho
+    # (c) Ecological: RI-PSI × Avg_Rho
     ax = fig.add_subplot(2, 2, 3)
     x = eco[RI].values.astype(float); y = eco["Avg_Rho"].values.astype(float)
     m = np.isfinite(x) & np.isfinite(y)
@@ -325,7 +325,7 @@ def plot_figure(fp, eco, corr):
     ax.legend(fontsize=8)
     ax.axhline(0, color="grey", lw=0.6, ls=":")
 
-    # (d) FL 转录本 PSI × 免疫特征 per-cancer 关联热图
+    # (d) FL transcript PSI × immune features per-cancer correlation heatmap
     ax = fig.add_subplot(2, 2, 4)
     fl = corr[corr["Transcript"] == FL]
     piv = fl.pivot_table(index="Cancer", columns="Feature", values="Rho")

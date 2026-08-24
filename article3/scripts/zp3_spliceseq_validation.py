@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-Article 3 补强① — SpliceSeq 事件级 PSI 交叉验证
+Article 3 Supplement ① — SpliceSeq event-level PSI cross-validation
 ================================================
-目的：验证"转录本 TPM 比例代理 PSI"是否与独立的事件级 PSI（TCGA SpliceSeq，
-基于 junction/exon 读取计数，与 TPM 定量相互独立）一致。
+Purpose: verify whether "transcript TPM proportion proxy PSI" is consistent with independent event-level PSI (TCGA SpliceSeq，
+based on junction/exon read counts, independent of TPM quantification）.
 
-数据源：
+Data sources:
   - spliceseq_zp3/PSI_download_GBM.txt / PSI_download_LGG.txt
-    （POST https://bioinformatics.mdanderson.org/TCGASpliceSeq/PSIDownload 下载，
-     ZP3 共 3 个 AP 事件：80168 exons=3.1 / 80169 exons=1 / 80170 exons=2.1）
-  - zp3_isoform_proportions.csv（19131 样本 × 7 转录本比例）
+    （downloaded via POST https://bioinformatics.mdanderson.org/TCGASpliceSeq/PSIDownload，
+     ZP3 has 3 AP events: 80168 exons=3.1 / 80169 exons=1 / 80170 exons=2.1）
+  - zp3_isoform_proportions.csv（19131 samples × 7 transcript proportions）
 
-事件↔转录本映射（依据 Ensembl GRCh38 5' 端结构）：
-  - AP 80169 (exons=1, 最 5' 经典启动子)  ↔ FL canonical ENST00000336517.8
-  - AP 80170 (exons=2.1, 内部启动子)      ↔ ENST00000394857/00416245（中间转录本）
-  - AP 80168 (exons=3.1, 最 3' 内部启动子) ↔ ENST00000394860/00466960(RI)/00467555/00479793
+Event↔transcript mapping（based on Ensembl GRCh38 5' end structure）:
+  - AP 80169 (exons=1, most 5' classical promoter)  ↔ FL canonical ENST00000336517.8
+  - AP 80170 (exons=2.1, internal promoter)      ↔ ENST00000394857/00416245（intermediate transcript）
+  - AP 80168 (exons=3.1, most 3' internal promoter) ↔ ENST00000394860/00466960(RI)/00467555/00479793
 
-判定：Spearman ρ > 0.7 → 代理 PSI 方法学站住；否则降级为 TRA 口径。
-产物：spliceseq_zp3/spliceseq_validation_results.csv + fig_spliceseq_validation.png
+Criterion: Spearman ρ > 0.7 → proxy PSI methodology stands; otherwise downgraded to TRA definition.
+Output: spliceseq_zp3/spliceseq_validation_results.csv + fig_spliceseq_validation.png
 """
 import os
 import numpy as np
@@ -33,28 +33,28 @@ PROP_CSV = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(BASE))),
 OUT_CSV = os.path.join(SEQ_DIR, "spliceseq_validation_results.csv")
 OUT_FIG = os.path.join(SEQ_DIR, "fig_spliceseq_validation.png")
 
-# 事件 → 转录本 映射
+# Event → transcript mapping
 AP_EVENT_MAP = {
-    "80168": {  # exons=3.1, 最 3' 内部启动子
+    "80168": {  # exons=3.1, most 3' internal promoter
         "label": "AP 3.1 (internal promoter, 3')",
         "txs": ["ENST00000394860.3", "ENST00000466960.5", "ENST00000467555.1", "ENST00000479793.5"],
     },
-    "80169": {  # exons=1, 经典启动子
+    "80169": {  # exons=1, canonical promoter
         "label": "AP 1 (canonical promoter, 5')",
         "txs": ["ENST00000336517.8"],  # FL canonical
     },
-    "80170": {  # exons=2.1, 中间启动子
+    "80170": {  # exons=2.1, internal promoter
         "label": "AP 2.1 (internal promoter)",
         "txs": ["ENST00000394857.7", "ENST00000416245.5"],
     },
 }
 
-# 生态学验证的癌种（FL 指纹高/低两端 + 胶质瘤）
+# Cancers for ecological validation (FL fingerprint high/low extremes + glioma)
 ECO_CANCERS = ["GBM", "LGG", "OV", "STAD", "COAD", "DLBC", "THYM", "SKCM"]
 
 
 def load_spliceseq(cancer):
-    """读取 SpliceSeq PSI 文件，返回 event_id -> (label, Series[样本->PSI])。"""
+    """Read SpliceSeq PSI file, return event_id -> (label, Series[sample->PSI])."""
     path = os.path.join(SEQ_DIR, f"PSI_download_{cancer}.txt")
     df = pd.read_csv(path, sep="\t")
     ev = df[df["symbol"] == "ZP3"].copy()
@@ -64,7 +64,7 @@ def load_spliceseq(cancer):
         aid = str(int(float(r["as_id"])))
         vals = r[sample_cols].astype(str).replace("null", np.nan).replace("", np.nan)
         vals = pd.to_numeric(vals, errors="coerce")
-        # SpliceSeq 样本名 TCGA_02_0047 -> TCGA-02-0047（与比例矩阵前缀对齐）
+        # SpliceSeq sample name TCGA_02_0047 -> TCGA-02-0047 (aligned with proportion matrix prefix)
         idx = [s.replace("_", "-") for s in sample_cols]
         s = pd.Series(vals.values, index=idx, name=aid)
         out[aid] = s
@@ -78,22 +78,22 @@ def load_proportions():
 
 
 def main():
-    print("=== Article 3 补强①: SpliceSeq 事件级 PSI 交叉验证 ===\n")
+    print("=== Article 3 Supplement ①: SpliceSeq event-level PSI cross-validation ===\n")
     psi = load_proportions()
-    print(f"比例矩阵: {psi.shape[0]} 样本 × {psi.shape[1]} 转录本")
+    print(f"Proportion matrix: {psi.shape[0]} samples × {psi.shape[1]} transcripts")
 
     rows = []
     panels = []
     for cancer in ["GBM", "LGG"]:
         evs = load_spliceseq(cancer)
-        print(f"\n[{cancer}] SpliceSeq 事件: {list(evs.keys())}")
+        print(f"\n[{cancer}] SpliceSeq events: {list(evs.keys())}")
         for aid, meta in AP_EVENT_MAP.items():
             if aid not in evs:
-                print(f"  !! 事件 {aid} 缺失")
+                print(f"  !! Event {aid} missing")
                 continue
             ss = evs[aid].dropna()
-            # 样本前缀对齐：SpliceSeq 用 TCGA-XX-XXXX，比例矩阵用 TCGA-XX-XXXX-01
-            # 构建 ss 样本 -> psi 样本 映射
+            # Sample prefix alignment: SpliceSeq uses TCGA-XX-XXXX, ratio matrix uses TCGA-XX-XXXX-01
+            # Build ss sample -> psi sample mapping
             map2 = {}
             for s in ss.index:
                 if s in psi.index:
@@ -102,12 +102,12 @@ def main():
                     map2[s] = s + "-01"
             ok = list(map2.keys())
             if len(ok) < 20:
-                print(f"  {meta['label']} (as_id={aid}): 仅 {len(ok)} 样本对齐，跳过")
+                print(f"  {meta['label']} (as_id={aid}): only {len(ok)} samples aligned, skipping")
                 continue
-            # 聚合事件对应的转录本比例（内部启动子 = 多个转录本之和）
+            # Aggregate transcript proportions for event (internal promoter = sum of multiple transcripts)
             tx_cols = [t for t in meta["txs"] if t in psi.columns]
             if not tx_cols:
-                print(f"  {meta['label']}: 无对应转录本列")
+                print(f"  {meta['label']}: no corresponding transcript columns")
                 continue
             psi_ok = [map2[s] for s in ok]
             txsum = psi.loc[psi_ok, tx_cols].sum(axis=1)
@@ -117,7 +117,7 @@ def main():
             y_ss = y_ss[m]
             x_tx = x_tx[m]
             if len(x_tx) < 20:
-                print(f"  {meta['label']}: 有效样本 {len(x_tx)} < 20，跳过")
+                print(f"  {meta['label']}: valid samples {len(x_tx)} < 20, skipping")
                 continue
             rho, p = stats.spearmanr(x_tx, y_ss)
             rho_pear, p_pear = stats.pearsonr(x_tx, y_ss)
@@ -132,9 +132,9 @@ def main():
 
     res = pd.DataFrame(rows)
     res.to_csv(OUT_CSV, index=False)
-    print(f"\n结果已存: {OUT_CSV}")
+    print(f"\nResults saved: {OUT_CSV}")
 
-    # ---- 图 ----
+    # ---- Figure ----
     if panels:
         n = len(panels)
         fig, axes = plt.subplots(1, n, figsize=(5.5 * n, 4.6))
@@ -156,15 +156,15 @@ def main():
         fig.tight_layout()
         fig.savefig(OUT_FIG, dpi=200, bbox_inches="tight")
         plt.close(fig)
-        print(f"图已存: {OUT_FIG}")
+        print(f"Figure saved: {OUT_FIG}")
 
-    # ---- 跨癌种生态学验证（样本级 → 癌种级）----
-    print("\n=== 跨癌种生态学验证 ===")
+    # ---- Cross-cancer ecological validation (sample-level → cancer-level) ----
+    print("\n=== Cross-cancer ecological validation ===")
     eco_rows = []
     for cancer in ECO_CANCERS:
         path = os.path.join(SEQ_DIR, f"PSI_download_{cancer}.txt")
         if not os.path.exists(path):
-            print(f"  !! {cancer} 数据缺失，跳过")
+            print(f"  !! {cancer} data missing, skipping")
             continue
         df = pd.read_csv(path, sep="\t")
         ev = df[df["symbol"] == "ZP3"]
@@ -184,10 +184,10 @@ def main():
     if len(m) >= 5:
         rho_e, p_e = stats.spearmanr(m["Our_FL_PSI"], m["SpliceSeq_AP1_PSI"])
         rho_pe, p_pe = stats.pearsonr(m["Our_FL_PSI"], m["SpliceSeq_AP1_PSI"])
-        print(f"  癌种级 n={len(m)}: Our FL-PSI × SpliceSeq AP-1 PSI")
+        print(f"  Cancer-level n={len(m)}: Our FL-PSI × SpliceSeq AP-1 PSI")
         print(f"    Spearman ρ={rho_e:+.3f} (p={p_e:.2e}) | Pearson r={rho_pe:+.3f} (p={p_pe:.2e})")
         m.to_csv(os.path.join(SEQ_DIR, "spliceseq_ecological_validation.csv"), index=False)
-        # 生态学散点图
+        # Ecological scatter plot
         fig2, ax2 = plt.subplots(figsize=(6.2, 5))
         ax2.scatter(m["Our_FL_PSI"], m["SpliceSeq_AP1_PSI"], s=90, alpha=0.85,
                     c="#C00000", edgecolor="white", zorder=3)
@@ -204,21 +204,21 @@ def main():
         fig2.tight_layout()
         fig2.savefig(os.path.join(SEQ_DIR, "fig_spliceseq_ecological.png"), dpi=200)
         plt.close(fig2)
-        print(f"  生态学图: fig_spliceseq_ecological.png")
+        print(f"  Ecological plot: fig_spliceseq_ecological.png")
     else:
-        print(f"  癌种匹配不足 ({len(m)})")
+        print(f"  Insufficient cancer matching ({len(m)})")
 
-    # ---- 判定 ----
-    print("\n=== 判定 ===")
+    # ---- Verdict ----
+    print("\n=== Verdict ===")
     if len(res) == 0:
-        print("!! 无有效验证结果")
+        print("!! No valid validation results")
     for _, r in res.iterrows():
-        verdict = "✅ 站住 (ρ>0.7)" if r["Spearman_rho"] > 0.7 else (
-            "⚠️ 中等 (0.4<ρ≤0.7)" if r["Spearman_rho"] > 0.4 else "❌ 不一致")
+        verdict = "✅ Holds (ρ>0.7)" if r["Spearman_rho"] > 0.7 else (
+            "⚠️ Moderate (0.4<ρ≤0.7)" if r["Spearman_rho"] > 0.4 else "❌ Inconsistent")
         print(f"  {r['Cancer']} {r['Event_Label']}: ρ={r['Spearman_rho']:+.3f} → {verdict}")
     if len(m) >= 5:
-        v2 = "✅ 站住 (ρ>0.7)" if rho_e > 0.7 else "⚠️ 未达阈值"
-        print(f"  生态学(癌种级): ρ={rho_e:+.3f} → {v2}")
+        v2 = "✅ Holds (ρ>0.7)" if rho_e > 0.7 else "⚠️ Threshold not met"
+        print(f"  Ecological (cancer-level): ρ={rho_e:+.3f} → {v2}")
 
 
 if __name__ == "__main__":

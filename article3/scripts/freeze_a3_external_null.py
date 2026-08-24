@@ -1,27 +1,27 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结⑦ — 外部 null 诊断（freeze_a3_external_null）
+A3 Freeze ⑦ - External Null Diagnostics (freeze_a3_external_null)
 ================================================================
-目的：对「外部基因级 ZP3–免疫关联为 null」做可冻结的诊断，回答三件事：
-  (1) null 是不是因为 ZP3 在低表达平台接近检测底？
-  (2) null 是不是因为 n=32/24 检验功效太低？
-  (3) null 是不是被少数样本或表达尺度选择驱动？
+Purpose: Provide freezable diagnostics for the external gene-level ZP3–immune association being null, answering three things:
+  (1) Is the null result because ZP3 approaches the detection floor on a low-expression platform?
+  (2) Is the null result because n=32/24 has too low statistical power?
+  (3) Is the null result driven by a few samples or expression-scale choices?
 
-本脚本不试图把 null 救回阳性，只做诚实诊断，全部冻结进 a3_external_null_diagnostics.csv。
+This script does not attempt to rescue the null into positive; it only performs honest diagnostics, all frozen into a3_external_null_diagnostics.csv.
 
-复用 freeze_a3_external.py 的统计基元（rankdata / betai / spearman / zscore_consensus / load_matrix）。
+Reuses statistical primitives from freeze_a3_external.py (rankdata / betai / spearman / zscore_consensus / load_matrix).
 
-四个诊断模块：
-  D1. ZP3 检测质量：零值比例、非零数、IQR、中位数、范围、tied-rank 比例
-  D2. 功效分析：n=32/24 在 α=0.05 双侧下可检测的最小 |ρ|（df=n-2，t 临界）
-  D3. 表达尺度敏感性：原始 / log1p / 二值(检测) / 高表达分层(≥Q3) → Spearman(ZP3, score)
-  D4. jackknife 稳定性：逐样本剔除后 M2 ρ 的波动范围
+Four diagnostic modules:
+  D1. ZP3 detection quality: zero proportion, nonzero count, IQR, median, range, tied-rank proportion
+  D2. Power analysis: minimum detectable |ρ| for n=32/24 under two-sided α=0.05 (df=n-2, t critical)
+  D3. Expression-scale sensitivity: raw / log1p / binary (detection) / high-expression stratification (≥Q3) → Spearman(ZP3, score)
+  D4. Jackknife stability: fluctuation range of M2 ρ after removing each sample one by one
 
-输入：
+Input:
   - article3/data/external_gbm/GSE77530_GBM_AH_32_RSEQ_expression_profile.txt.gz
   - article3/data/external_gbm/GSE113474_counts.norm.csv.gz
-输出：
+Output:
   - article3/results/a3_external_null_diagnostics.csv
 """
 import os
@@ -31,7 +31,7 @@ import gzip
 import math
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 层 = 项目根
+ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 levels = project root
 EXT_DIR = os.path.join(ROOT, "article3", "data", "external_gbm")
 OUT_CSV = os.path.join(ROOT, "article3", "results", "a3_external_null_diagnostics.csv")
 
@@ -52,7 +52,7 @@ IMMUNE = {
 
 
 # ---------------------------------------------------------------------------
-# 统计基元（与 freeze_a3_external.py 同一实现）
+# Statistical primitives (same implementation as freeze_a3_external.py)
 # ---------------------------------------------------------------------------
 def f2(x):
     try:
@@ -190,7 +190,7 @@ def zscore_consensus(rows, genes):
 
 
 # ---------------------------------------------------------------------------
-# 诊断模块
+# Diagnostics module
 # ---------------------------------------------------------------------------
 def quantile(vals, q):
     s = sorted(vals)
@@ -205,7 +205,7 @@ def quantile(vals, q):
 
 
 def diag_detection(name, zp3):
-    """D1: ZP3 检测质量"""
+    """D1: ZP3 detection quality"""
     n = len(zp3)
     nz = [v for v in zp3 if v and v > 0]
     n_zero = n - len(nz)
@@ -219,23 +219,23 @@ def diag_detection(name, zp3):
         "Value": f"n={n},zero={n_zero}({zero_frac:.2f}),med={med:.3f},IQR={iqr:.3f},"
                  f"min={min(zp3):.3f},max={max(zp3):.3f},tied={tied}({tied_frac:.2f})",
         "Interpretation": (
-            "低零值+合理IQR → 测量可用" if zero_frac < 0.2 and iqr > 0
-            else "高零值或低IQR → 近检测底，秩相关被压缩"),
+            "Low zero fraction + reasonable IQR → measurement usable" if zero_frac < 0.2 and iqr > 0
+            else "High zero fraction or low IQR → near detection floor, rank correlation compressed"),
     }
 
 
 def diag_power(name, n):
-    """D2: 功效分析 — α=0.05 双侧最小可检测 |ρ|"""
+    """D2: Power analysis — α=0.05 two-sided minimum detectable |ρ|"""
     df = n - 2
-    # t 临界：利用 betai 反推不方便，用近似 + 精确查表组合
-    # 小样本用已知临界值表（df<=30）+ 大样本正态近似
+    # t critical value: inverting via betai is inconvenient; use approximation + exact lookup table combination
+    # Small samples use known critical value table (df<=30) + large-sample normal approximation
     tcrit_table = {
         22: 2.074, 23: 2.069, 30: 2.042,  # n=24→df22, n=32→df30
     }
     if df in tcrit_table:
         tcrit = tcrit_table[df]
     else:
-        # 大样本近似（df>30）: t ≈ z_{0.975} = 1.96
+        # Large-sample approximation (df>30): t ≈ z_{0.975} = 1.96
         tcrit = 1.96
     # |r| = t / sqrt(t^2 + df)
     min_r = tcrit / math.sqrt(tcrit * tcrit + df)
@@ -243,46 +243,46 @@ def diag_power(name, n):
         "Cohort": name, "Diag": "D2_power", "Metric": f"n={n}",
         "Value": f"alpha=0.05,two-sided,min_detectable_|rho|={min_r:.3f}",
         "Interpretation": (
-            f"该样本量最多检出 |rho|≥{min_r:.2f}；真实效应 0.2–0.3 大概率落入 null 区间"),
+            f"At this sample size, can detect at most |rho|≥{min_r:.2f}; true effects 0.2–0.3 likely fall into null interval"),
     }
 
 
 def diag_scale(name, zp3, score):
-    """D3: 表达尺度敏感性"""
+    """D3: expression scale sensitivity"""
     out = []
-    # 原始
+    # original
     r_raw, _ = spearman(zp3, score)
     # log1p
     zp3_log = [math.log1p(max(0.0, v)) for v in zp3]
     r_log, _ = spearman(zp3_log, score)
-    # 二值（检测/未检测）
+    # binary (detected / not detected)
     zp3_bin = [1.0 if v and v > 0 else 0.0 for v in zp3]
     r_bin, _ = spearman(zp3_bin, score)
-    # 高表达分层（≥Q3 vs <Q3）
+    # high-expression stratification (≥Q3 vs <Q3)
     q3 = quantile(zp3, 0.75)
     zp3_hi = [1.0 if v >= q3 else 0.0 for v in zp3]
     r_hi, _ = spearman(zp3_hi, score)
     out.append({
         "Cohort": name, "Diag": "D3_scale_M2", "Metric": "raw",
-        "Value": f"rho={r_raw:+.3f}", "Interpretation": "原始表达",
+        "Value": f"rho={r_raw:+.3f}", "Interpretation": "raw expression",
     })
     out.append({
         "Cohort": name, "Diag": "D3_scale_M2", "Metric": "log1p",
-        "Value": f"rho={r_log:+.3f}", "Interpretation": "log1p 变换",
+        "Value": f"rho={r_log:+.3f}", "Interpretation": "log1p transformation",
     })
     out.append({
         "Cohort": name, "Diag": "D3_scale_M2", "Metric": "detect_binary",
-        "Value": f"rho={r_bin:+.3f}", "Interpretation": "检测/未检测二值",
+        "Value": f"rho={r_bin:+.3f}", "Interpretation": "detected/not detected binary",
     })
     out.append({
         "Cohort": name, "Diag": "D3_scale_M2", "Metric": "high_vs_low",
-        "Value": f"rho={r_hi:+.3f}", "Interpretation": "高表达(≥Q3) vs 低表达",
+        "Value": f"rho={r_hi:+.3f}", "Interpretation": "high expression (≥Q3) vs low expression",
     })
     return out
 
 
 def diag_jackknife(name, zp3, score):
-    """D4: jackknife 稳定性 — 逐样本剔除后 M2 ρ 波动"""
+    """D4: jackknife stability — M2 ρ fluctuation after removing each sample one by one"""
     n = len(zp3)
     rhos = []
     for i in range(n):
@@ -292,7 +292,7 @@ def diag_jackknife(name, zp3, score):
         rhos.append(r)
     rmin, rmax = min(rhos), max(rhos)
     rmean = sum(rhos) / n
-    # 与全样本比较
+    # compare with full sample
     r_full, _ = spearman(zp3, score)
     spread = rmax - rmin
     all_neg = rmin < 0 and rmax < 0
@@ -301,26 +301,26 @@ def diag_jackknife(name, zp3, score):
         "Value": f"full_rho={r_full:+.3f},leave1out_range=[{rmin:+.3f},{rmax:+.3f}],"
                  f"spread={spread:.3f},mean={rmean:+.3f}",
         "Interpretation": (
-            "方向一致为负且幅度中等敏感 → 非个别样本翻转"
+            "Direction consistently negative and moderate magnitude sensitivity → not flipped by individual samples"
             if spread < 0.25 and all_neg
-            else "范围宽 → 结果对个别样本敏感"),
+            else "Wide range → result sensitive to individual samples"),
     }
 
 
 def main():
-    assert os.path.isfile(GSE77530), f"缺失: {GSE77530}"
-    assert os.path.isfile(GSE113474), f"缺失: {GSE113474}"
+    assert os.path.isfile(GSE77530), f"Missing: {GSE77530}"
+    assert os.path.isfile(GSE113474), f"Missing: {GSE113474}"
 
     cohorts = [
         ("GSE77530_MDAnderson", GSE77530, "\t", "RPKM"),
         ("GSE113474_NYU", GSE113474, ",", "norm_counts"),
     ]
     rows_out = []
-    print("=== A3 冻结⑦ 外部 null 诊断 ===")
+    print("=== A3 Freeze⑦ External Null Diagnostics ===")
     for name, path, delim, unit in cohorts:
         samples, mat = load_matrix(path, delim)
         if "ZP3" not in mat:
-            print(f"  {name}: ZP3 缺失，跳过"); continue
+            print(f"  {name}: ZP3 missing, skipping"); continue
         zp3 = mat["ZP3"]
         n = len(samples)
         print(f"\n{name}: n={n}, unit={unit}")
@@ -328,18 +328,18 @@ def main():
         # D1
         d1 = diag_detection(name, zp3)
         rows_out.append(d1)
-        print(f"  D1 检测质量: {d1['Value']} → {d1['Interpretation']}")
+        print(f"  D1 detection quality: {d1['Value']} → {d1['Interpretation']}")
 
         # D2
         d2 = diag_power(name, n)
         rows_out.append(d2)
-        print(f"  D2 功效: {d2['Value']}")
+        print(f"  D2 power: {d2['Value']}")
 
-        # M2 免疫评分（诊断尺度 + jackknife 的基准）
+        # M2 immune score (baseline for diagnostic scale + jackknife)
         m2_genes = IMMUNE['M2_Macrophage']
         score, used = zscore_consensus(mat, m2_genes)
         if score is None:
-            print(f"  M2 评分基因不足，跳过 D3/D4"); continue
+            print(f"  M2 scoring genes insufficient, skipping D3/D4"); continue
 
         # D3
         for d3 in diag_scale(name, zp3, score):
@@ -357,29 +357,29 @@ def main():
         w.writeheader()
         for r in rows_out:
             w.writerow(r)
-    print(f"\n冻结表: {OUT_CSV}")
+    print(f"\nFrozen table: {OUT_CSV}")
 
-    # ---- 自检：诊断不影响主结论，只核对格式与合理性 ----
-    print("\n=== 自检 ===")
+    # ---- Self-check: diagnostics do not affect main conclusions, only verify format and reasonableness ----
+    print("\n=== Self-check ===")
     ok = True
-    # 自检 1: 所有行有解释
+    # Self-check 1: all rows have interpretation
     for r in rows_out:
         if not r.get("Interpretation"):
-            print(f"FAIL: 缺解释 {r}"); ok = False
-    # 自检 2: D2 最小可检测 |rho| 在合理范围 (0.3–0.6)
+            print(f"FAIL: missing interpretation {r}"); ok = False
+    # Self-check 2: D2 minimum detectable |rho| in reasonable range (0.3–0.6)
     for r in rows_out:
         if r["Diag"] == "D2_power":
             s = r["Value"]
             lo = s.rfind("=") + 1
             mr = float(s[lo:].strip())
             if not (0.3 <= mr <= 0.6):
-                print(f"FAIL: D2 最小|rho|异常 {mr}"); ok = False
-    # 自检 3: D1 零值比例非负
+                print(f"FAIL: D2 minimum |rho| abnormal {mr}"); ok = False
+    # Self-check 3: D1 zero proportion non-negative
     for r in rows_out:
         if r["Diag"] == "D1_detection":
             if "zero=" not in r["Value"]:
-                print(f"FAIL: D1 格式异常"); ok = False
-    print("  注：本脚本只做诊断，不重算主 null；主 null 见 a3_external_gbm.csv")
+                print(f"FAIL: D1 format abnormal"); ok = False
+    print("  Note: this script only does diagnostics, does not recompute the main null; main null see a3_external_gbm.csv")
     print("\nRESULT:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)
 

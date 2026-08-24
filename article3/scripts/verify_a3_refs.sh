@@ -1,6 +1,6 @@
 #!/bin/bash
-# Crossref DOI 批量核验（curl 版）
-OUT="C:/D/workbuddy/科研/细胞外GPX4免疫抑制/article3/reports/a3_crossref_raw.jsonl"
+# Crossref DOI batch verification (curl version)
+OUT="C:/D/workbuddy/research/extracellularGPX4immunosuppression/article3/reports/a3_crossref_raw.jsonl"
 > "$OUT"
 PY="C:/Users/lm962/.workbuddy/binaries/python/versions/3.13.12/python.exe"
 

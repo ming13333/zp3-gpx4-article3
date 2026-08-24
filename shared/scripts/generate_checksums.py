@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-生成输入数据校验和清单（I3 复现性修复的一部分）
+Generate input data checksum manifest (part of I3 reproducibility fix)
 ================================================
-为所有大型输入数据文件计算 sha256 与字节数，写入 CHECKSUMS.sha256。
-二次运行的分析应当先校验本地文件与清单一致，方能保证可复现。
-用法：
-    python generate_checksums.py            # 依据下方 CURATED 列表生成
-    python generate_checksums.py --verify   # 校验现有文件与清单是否一致
+Calculate sha256 and byte counts for all large input data files, write to CHECKSUMS.sha256.
+A re-run analysis should first verify that local files match the manifest to ensure reproducibility.
+Usage:
+    python generate_checksums.py            # Generate based on the CURATED list below
+    python generate_checksums.py --verify   # Verify whether existing files match the manifest
 """
 import os
 import sys
@@ -16,7 +16,7 @@ import json
 
 BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "shared", "data")
 
-# 关键输入数据文件（相对 BASE）。这些文件由下载脚本真实获取，是分析的底层输入。
+# Key input data files (relative to BASE). These files are actually fetched by the download script and serve as the underlying input for the analysis.
 CURATED = [
     "phase1_knowledge_gap_filling/TcgaTargetGtex_rsem_gene_tpm.gz",
     "phase1_knowledge_gap_filling/TcgaTargetGtex_rsem_isoform_tpm.gz",
@@ -64,9 +64,9 @@ def main():
     for rel in CURATED:
         fp = os.path.join(BASE, rel)
         if not os.path.exists(fp):
-            print(f"  (跳过缺失) {rel}")
+            print(f"  (skipping missing) {rel}")
             continue
-        print(f"  计算校验和: {rel} ...")
+        print(f"  computing checksum: {rel} ...")
         sha = sha256_of(fp)
         size = os.path.getsize(fp)
         records.append((rel, sha, size))
@@ -77,12 +77,12 @@ def main():
     if mode == "--write":
         with open(out, "w") as f:
             f.write("# sha256  <relative-path-from-output/>\n")
-            f.write(f"# 生成环境: {sys.version.split()[0]}\n")
+            f.write(f"# generation environment: {sys.version.split()[0]}\n")
             for rel, sha, size in records:
                 f.write(f"{sha}  {rel}  # {size} bytes\n")
-        print(f"\n已写入 {len(records)} 条校验和 -> {out}")
+        print(f"\nwrote {len(records)} checksum entries -> {out}")
     else:
-        print(f"\n校验完成，共 {len(records)} 个文件。")
+        print(f"\nverification complete, {len(records)} files total.")
 
 
 if __name__ == "__main__":

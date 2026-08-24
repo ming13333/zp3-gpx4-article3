@@ -1,21 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A3 冻结⑧ — leave-one-cancer-out 内部验证（freeze_a3_loco）
+A3 Freeze⑧ — leave-one-cancer-out internal validation (freeze_a3_loco)
 ================================================================
-目的：回答「内部 isoform 关联是否由某几个癌种单独驱动？」。
-      对 32 癌种的 FL 比例 × 免疫评分关联，逐癌种留出后重算固定效应
-      Fisher-z 合并，观察合并 ρ / 95% CI 是否稳定。
+Purpose: answer whether the internal isoform association is driven by only a few cancer types.
+      For the association between FL proportion and immune scores across 32 cancer types, recompute the fixed effect after leaving out each cancer type one by one.
+      Combine via Fisher-z and check whether the pooled ρ / 95% CI is stable.
 
-这是外部 null 诊断的补充：外部 null 反映「基因级跨队列泛化受限」，
-本脚本证明「内部 isoform 级关联在癌种间具有稳健性（非单癌种假象）」。
+This is a supplement to the external null diagnosis: the external null reflects limited gene-level cross-cohort generalization,
+This script demonstrates that internal isoform-level associations are robust across cancer types (not a single-cancer artifact).
 
-输入：article3/results/zp3_psi_pancancer_results/psi_immune_joined_samples.csv
-      （每行一个样本，列含 FL 比例、7 个 score_* 免疫评分、Cancer）
-输出：article3/results/a3_loco_frozen.csv
-      （每癌种一行：留出该癌种后的合并 ρ / 95% CI / Q / I² / 剩余癌种数）
+Input: article3/results/zp3_psi_pancancer_results/psi_immune_joined_samples.csv
+      (one sample per row; columns include FL proportion, 7 score_* immune scores, Cancer)
+Output: article3/results/a3_loco_frozen.csv
+      (one row per cancer type: pooled ρ / 95% CI / Q / I² / number of remaining cancer types after leaving out that cancer type)
 
-统计基元复用 freeze_a3_robustness.py（纯标准库 Spearman + betai + Fisher-z）。
+Statistical primitives reuse freeze_a3_robustness.py (pure standard-library Spearman + betai + Fisher-z).
 """
 import os
 import sys
@@ -23,7 +23,7 @@ import csv
 import math
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 层 = 项目根
+ROOT = os.path.dirname(os.path.dirname(BASE))  # 2 levels up = project root
 JOINED = os.path.join(ROOT, "article3", "results", "zp3_psi_pancancer_results",
                       "psi_immune_joined_samples.csv")
 OUT_CSV = os.path.join(ROOT, "article3", "results", "a3_loco_frozen.csv")
@@ -35,7 +35,7 @@ SCORES = [c.replace("score_", "") for c in IMMUNE]
 
 
 # ---------------------------------------------------------------------------
-# 纯标准库统计基元（与 freeze_a3_robustness.py 一致）
+# Pure standard-library statistical primitives (consistent with freeze_a3_robustness.py)
 # ---------------------------------------------------------------------------
 def f2(x):
     try:
@@ -140,11 +140,11 @@ def load():
 
 
 def main():
-    assert os.path.isfile(JOINED), f"输入缺失: {JOINED}"
+    assert os.path.isfile(JOINED), f"Input missing: {JOINED}"
     rows = load()
-    print(f"Joined 样本: {len(rows)}")
+    print(f"Joined samples: {len(rows)}")
 
-    # 按癌种分组
+    # Group by cancer type
     by_cancer = {}
     for d in rows:
         c = d.get("Cancer")
@@ -166,11 +166,11 @@ def main():
         by_cancer.setdefault(c, []).append(entry)
 
     cancers = sorted(by_cancer.keys())
-    print(f"癌种数: {len(cancers)}")
+    print(f"Number of cancer types: {len(cancers)}")
 
-    # 全量池化（基线，供对照）
+    # Full pooling (baseline, for comparison)
     def pooled(entries_per_score):
-        """entries_per_score: {score: [(fl, score_val), ...]} 跨所有保留癌种"""
+        """entries_per_score: {score: [(fl, score_val), ...]} across all retained cancer types"""
         rows_out = {}
         for sc in IMMUNE:
             xs, ys = [], []
@@ -181,33 +181,33 @@ def main():
             rows_out[sc] = r
         return rows_out
 
-    # 预聚合每个癌种的 (fl, score) 列表
+    # Pre-aggregate (fl, score) lists per cancer type
     cancer_scores = {}
     for c in cancers:
         d = {sc: [(e["fl"], e[sc]) for e in by_cancer[c]] for sc in IMMUNE}
         cancer_scores[c] = d
 
-    # 全量合并（leave-none-out 基线）
+    # Full merge (leave-none-out baseline)
     all_entries = {sc: [] for sc in IMMUNE}
     for c in cancers:
         for sc in IMMUNE:
             all_entries[sc].extend(cancer_scores[c][sc])
 
     def fisher_meta(entries):
-        """固定效应 Fisher-z 合并，返回 (pooled_r, lo, hi, Q, I2, k)"""
+        """Fixed-effect Fisher-z pooling, returns (pooled_r, lo, hi, Q, I2, k)"""
         Sw = 0.0
         Z = 0.0
         zs = []
         ns = []
         for sc in IMMUNE:
             for x, y in entries[sc]:
-                pass  # 这里不使用
-        # 改为逐癌种聚合（每癌种一个 z），避免样本量重复
-        # 先算每癌种每评分的单相关系数，再按癌种加权
+                pass  # not used here
+        # Instead aggregate by cancer type (one z per cancer type) to avoid duplicate sample sizes
+        # First compute per-cancer per-score single correlation, then weight by cancer type
         return None
 
-    # 简化：LOCO 以癌种为随机效应单元，每癌种内先算 Spearman(FL, score)，
-    # 再对「保留癌种」做固定效应 Fisher-z 合并（权重 N_cancer - 3）。
+    # Simplified: LOCO uses cancer type as random effect unit; within each cancer type first compute Spearman(FL, score),
+    # then perform fixed-effect Fisher-z meta-analysis over 'retained cancer types' (weight N_cancer - 3).
     def cancer_level_z(c):
         out = {}
         for sc in IMMUNE:
@@ -243,7 +243,7 @@ def main():
         I2 = max(0.0, (Q - df) / Q) if Q > 0 else 0.0
         return pooled_r, math.tanh(lo), math.tanh(hi), Q, I2, len(zlist)
 
-    # 全量基线
+    # Full-data baseline
     frozen = []
     for score in SCORES:
         m = meta_over(cancers, "score_" + score)
@@ -279,10 +279,10 @@ def main():
         w.writeheader()
         for r in frozen:
             w.writerow(r)
-    print(f"冻结表: {OUT_CSV} ({len(frozen)} 行)")
+    print(f"Frozen table: {OUT_CSV} ({len(frozen)} rows)")
 
-    # ---- 自检：LOCO 合并 ρ 应与全量基线同号且幅度不剧烈翻转 ----
-    print("\n=== 自检 ===")
+    # ---- Self-check: LOCO pooled rho should have same sign as full baseline and magnitude not flip sharply ----
+    print("\n=== Self-check ===")
     ok = True
     base = {r["Score"]: r for r in frozen if r["Left_out_cancer"] == "NONE(all)"}
     flips = 0
@@ -294,13 +294,13 @@ def main():
             b_r = base[sc]["Pooled_rho"]
             if (b_r > 0) != (r["Pooled_rho"] > 0):
                 flips += 1
-                print(f"  方向翻转: 留出 {r['Left_out_cancer']} {sc} "
+                print(f"  Direction flip: leaving out {r['Left_out_cancer']} {sc} "
                       f"base={b_r:+.3f} lo={r['Pooled_rho']:+.3f}")
     if flips == 0:
-        print("  PASS: 所有 LOCO 合并 ρ 与全量基线同号（内部稳健，非单癌种驱动）")
+        print("  PASS: all LOCO pooled rho same sign as full baseline (internally robust, not driven by single cancer type)")
     else:
-        print(f"  WARN: {flips} 次方向翻转（仍冻结，供稿件透明报告）")
-    # 幅度变化范围
+        print(f"  WARN: {flips} direction flips (still frozen, for transparent reporting in manuscript)")
+    # Magnitude change range
     for sc in SCORES:
         vals = [r["Pooled_rho"] for r in frozen if r["Score"] == sc and r["Left_out_cancer"] != "NONE(all)"]
         if vals:
