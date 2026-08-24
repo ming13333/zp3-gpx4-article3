@@ -147,7 +147,8 @@ def load_tcga_zp3_expression():
     # 使用 cBioPortal API 获取
     results = {}
     
-    for study, entrez_id in [("gbm_tcga", 8277), ("lgg_tcga", 8277)]:
+    # ZP3 Entrez = 7784 (audited 2026-08-24; was erroneously 8277 = SP5)
+    for study, entrez_id in [("gbm_tcga", 7784), ("lgg_tcga", 7784)]:
         try:
             import requests as rq
             url = f"https://www.cbioportal.org/api/molecular-profiles/{study}_rna_seq_v2_mrna/molecular-data"
