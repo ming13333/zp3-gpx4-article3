@@ -10,11 +10,11 @@ Standalone code & data repository for **Article 3** of the ZP3–GPX4 extracellu
   - `figures/`  — submission-grade SVG figures
   - `reports/`  — audit / reference-verification reports
 - `reviews/` — peer-review artifacts (Article 3 only)
-- `shared/` — shared utilities (scripts, fetch, data, docs) copied in for self-containment
+- `shared/` — shared utilities (scripts, fetch, data) copied in for self-containment
 - `LICENSE`, `requirements.txt`, `environment.yml`
 
 ## Reproducibility
-Frozen tables under `article3/results/` are the source of truth. Methodology audits live in `shared/docs/`. Regeneration scripts are in `article3/scripts/` and `shared/scripts/`.
+Frozen tables under `article3/results/` are the source of truth. Regeneration scripts are in `article3/scripts/` and `shared/scripts/`. Per-script audit notes are embedded inline in the analysis scripts.
 
 ## Data Availability
 - **Code:** https://github.com/ming13333/zp3-gpx4-article3 (this repository)
